@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** ZA Stock
+**Project:** Sweet for You Salvage
 **Generated:** 2026-09-09
 **Category:** Internal stock & invoicing admin
 
@@ -18,15 +18,16 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary / CTA | `#0F766E` | `--primary` / `--accent-ink` |
+| Primary / CTA | `#E11D48` | `--primary` |
+| Accent text | `#BE123C` | `--accent-ink` |
+| Accent wash | `#FFE4E6` | `--accent` |
 | Background | `#FAFAFA` | `--canvas` |
 | Panel | `#FFFFFF` | `--paper` |
 | Text | `#18181B` | `--ink` |
 | Muted text | `#52525B` | `--soft` |
 | Border | `#E4E4E7` | `--line` |
-| Accent wash | `#CCFBF1` | `--accent` |
 
-**Notes:** Light zinc ledger, single teal accent. No purple, no dual accents, no dark mode default.
+**Notes:** Light zinc ledger, deep rose accent from brand, black/white high contrast. No bubblegum pink. No teal. No purple.
 
 ### Typography
 
@@ -36,8 +37,9 @@
 
 ### Branding
 
-- App chrome: **ZA Stock** (mark `ZA`)
-- Invoices and PDFs: **brand-free** (no product name)
+- App chrome: **Sweet for You Salvage** with circular logo (`/brand/sfy-logo.jpg`)
+- Short mark: **SFY**
+- Invoice PDFs: company name + logo + pink accents
 - Currency: **ZAR** via `en-ZA`
 
 ### Effects
@@ -49,11 +51,11 @@
 
 ### Anti-patterns
 
-- Pastel coral / purple glow blobs
+- Teal / purple glow themes
 - Neon outer glows
 - Card-in-card KPI grids
 - Decorative infinite animations
-- Brand name on invoice PDF
+- Emoji icons
 
 ### Pre-delivery checklist
 

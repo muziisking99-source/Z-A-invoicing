@@ -15,13 +15,31 @@ export type InvoicePdfData = {
   items: InvoicePdfItem[];
 };
 
-/** App palette (ZA Stock teal ledger) as RGB for jsPDF */
-const TEAL: [number, number, number] = [15, 118, 110];
+/** Sweet for You Salvage palette as RGB for jsPDF */
+const ROSE: [number, number, number] = [225, 29, 72];
+const ROSE_DEEP: [number, number, number] = [190, 18, 60];
 const INK: [number, number, number] = [24, 24, 27];
 const SOFT: [number, number, number] = [82, 82, 91];
 const LINE: [number, number, number] = [228, 228, 231];
-const WASH: [number, number, number] = [244, 244, 245];
+const WASH: [number, number, number] = [255, 241, 242];
 const WHITE: [number, number, number] = [255, 255, 255];
+const COMPANY = "Sweet for You Salvage";
+
+async function loadLogoDataUrl(): Promise<string | null> {
+  try {
+    const res = await fetch("/brand/sfy-logo.jpg");
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
 
 export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   const { jsPDF } = await import("jspdf");
@@ -31,35 +49,42 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   const left = 48;
   const right = pageW - 48;
   const contentW = right - left;
+  const logoData = await loadLogoDataUrl();
 
   // Top accent bar
-  doc.setFillColor(...TEAL);
+  doc.setFillColor(...ROSE);
   doc.rect(0, 0, pageW, 8, "F");
 
-  let y = 48;
+  let y = 36;
 
-  // Title block (right) — commercial invoice style
+  // Company brand (left) — large logo so mark text stays readable
+  const logoSize = 96;
+  if (logoData) {
+    doc.addImage(logoData, "JPEG", left, y, logoSize, logoSize);
+  }
+
+  // Title block (right)
+  const titleY = y + 22;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(28);
-  doc.setTextColor(...TEAL);
-  doc.text("INVOICE", right, y, { align: "right" });
+  doc.setTextColor(...ROSE_DEEP);
+  doc.text("INVOICE", right, titleY, { align: "right" });
 
-  y += 22;
   doc.setFontSize(12);
   doc.setTextColor(...INK);
-  doc.text(invoice.invoice_number, right, y, { align: "right" });
+  doc.text(invoice.invoice_number, right, titleY + 22, { align: "right" });
 
-  y += 16;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(...SOFT);
-  doc.text(shortDate(invoice.created_at), right, y, { align: "right" });
+  doc.text(shortDate(invoice.created_at), right, titleY + 38, { align: "right" });
+
+  y = logoData ? y + logoSize + 24 : 100;
 
   // BILL TO
-  y = 48;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.setTextColor(...TEAL);
+  doc.setTextColor(...ROSE_DEEP);
   doc.text("BILL TO", left, y);
 
   y += 16;
@@ -68,7 +93,7 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   doc.setTextColor(...INK);
   const billLines = doc.splitTextToSize(invoice.customer_name, contentW * 0.45);
   doc.text(billLines, left, y);
-  y = Math.max(y + billLines.length * 14, 110);
+  y = Math.max(y + billLines.length * 14, 130);
 
   y += 20;
 
@@ -79,7 +104,7 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   const colTotal = right;
   const rowH = 28;
 
-  doc.setFillColor(...TEAL);
+  doc.setFillColor(...ROSE);
   doc.rect(left, y, contentW, rowH, "F");
 
   doc.setFont("helvetica", "bold");
@@ -104,7 +129,7 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
     if (y + blockH > pageH - 160) {
       doc.addPage();
-      doc.setFillColor(...TEAL);
+      doc.setFillColor(...ROSE);
       doc.rect(0, 0, pageW, 8, "F");
       y = 48;
       alt = false;
@@ -135,7 +160,6 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
   y += 20;
 
-  // Totals block (right-aligned, sample style: Subtotal / Tax / Total)
   const totalsX = right - 200;
   const labelX = totalsX;
   const valueX = right;
@@ -143,7 +167,7 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   const drawTotalRow = (label: string, value: string, bold = false, accent = false) => {
     doc.setFont("helvetica", bold ? "bold" : "normal");
     doc.setFontSize(bold ? 12 : 10);
-    doc.setTextColor(...(accent ? TEAL : INK));
+    doc.setTextColor(...(accent ? ROSE_DEEP : INK));
     doc.text(label, labelX, y);
     doc.text(value, valueX, y, { align: "right" });
     y += bold ? 22 : 18;
@@ -153,9 +177,8 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   doc.line(totalsX, y - 10, right, y - 10);
 
   drawTotalRow("Subtotal", money(invoice.total));
-  drawTotalRow("Tax (0%)", money(0));
 
-  doc.setFillColor(...TEAL);
+  doc.setFillColor(...ROSE);
   doc.rect(totalsX - 8, y - 14, right - totalsX + 8, 28, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
@@ -164,8 +187,40 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   doc.text(money(invoice.total), valueX, y + 4, { align: "right" });
   y += 44;
 
-  // Closing note
+  if (y > pageH - 160) {
+    doc.addPage();
+    doc.setFillColor(...ROSE);
+    doc.rect(0, 0, pageW, 8, "F");
+    y = 48;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...ROSE_DEEP);
+  doc.text("BANKING DETAILS", left, y);
+  y += 16;
+
+  const bankRows: [string, string][] = [
+    ["Account holder", "Sweet for you"],
+    ["Bank", "Capitec business"],
+    ["Account number", "2572387049"],
+    ["Account type", "Business account"],
+    ["Reference", "Store name"],
+  ];
+
   doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  for (const [label, value] of bankRows) {
+    doc.setTextColor(...SOFT);
+    doc.text(label, left, y);
+    doc.setTextColor(...INK);
+    doc.setFont("helvetica", "bold");
+    doc.text(value, left + 120, y);
+    doc.setFont("helvetica", "normal");
+    y += 15;
+  }
+
+  y += 12;
   doc.setFontSize(10);
   doc.setTextColor(...SOFT);
   doc.text("Thank you for your business.", left, y);
@@ -173,13 +228,12 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   doc.setFontSize(9);
   doc.text("Please retain this invoice for your records.", left, y);
 
-  // Footer
   doc.setDrawColor(...LINE);
   doc.line(left, pageH - 36, right, pageH - 36);
   doc.setFontSize(8);
   doc.setTextColor(...SOFT);
-  doc.text(invoice.invoice_number, left, pageH - 22);
-  doc.text("Page 1", right, pageH - 22, { align: "right" });
+  doc.text(COMPANY, left, pageH - 22);
+  doc.text(invoice.invoice_number, right, pageH - 22, { align: "right" });
 
   doc.save(`${invoice.invoice_number}.pdf`);
 }

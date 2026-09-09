@@ -18,13 +18,13 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Current Stock · ZA Stock" },
+      { title: "Current Stock · Sweet for You Salvage" },
       {
         name: "description",
         content:
           "See every product with cost price, selling price and quantity on hand. Add products and top up stock.",
       },
-      { property: "og:title", content: "Current Stock · ZA Stock" },
+      { property: "og:title", content: "Current Stock · Sweet for You Salvage" },
       {
         property: "og:description",
         content: "Product stock levels, cost and selling prices in one ledger.",
@@ -103,7 +103,7 @@ function StockPage() {
         </div>
       </PageHeader>
 
-      <div className="panel mt-4 grid grid-cols-2 divide-x divide-line overflow-hidden rounded-xl sm:mt-6">
+      <div className="panel mt-3 grid grid-cols-2 divide-x divide-line overflow-hidden rounded-xl">
         <div className="px-3 py-3 sm:px-5 sm:py-4">
           <p className="text-xs font-medium text-soft sm:text-sm">Units on hand</p>
           <p className="tabular mt-1 font-mono text-xl font-semibold tracking-tight text-ink sm:text-2xl">
@@ -119,7 +119,7 @@ function StockPage() {
       </div>
 
       {/* Mobile cards */}
-      <section className="mt-4 space-y-3 md:hidden">
+      <section className="mt-3 space-y-2.5 md:hidden">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="panel rounded-xl p-4">
@@ -187,7 +187,7 @@ function StockPage() {
       </section>
 
       {/* Desktop table */}
-      <section className="panel mt-4 hidden overflow-hidden rounded-xl md:block">
+      <section className="panel mt-3 hidden overflow-hidden rounded-xl md:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-base">
             <thead>

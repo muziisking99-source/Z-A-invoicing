@@ -134,6 +134,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      delete_invoice: {
+        Args: { p_invoice_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

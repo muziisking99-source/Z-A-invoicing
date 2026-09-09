@@ -8,12 +8,13 @@ import { useAuth } from "@/lib/useAuth";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in · ZA Stock" },
+      { title: "Sign in · Sweet for You Salvage" },
       {
         name: "description",
-        content: "Sign in to ZA Stock to manage product stock and create customer invoices.",
+        content:
+          "Sign in to Sweet for You Salvage to manage product stock and create customer invoices.",
       },
-      { property: "og:title", content: "Sign in · ZA Stock" },
+      { property: "og:title", content: "Sign in · Sweet for You Salvage" },
       {
         property: "og:description",
         content: "Private internal tool for stock levels and invoicing.",
@@ -33,7 +34,7 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) navigate({ to: "/" });
+    if (!loading && session) navigate({ to: "/dashboard" });
   }, [loading, session, navigate]);
 
   const signIn = async (event: React.FormEvent) => {
@@ -45,7 +46,7 @@ function AuthPage() {
       toast.error(error.message);
       return;
     }
-    navigate({ to: "/" });
+    navigate({ to: "/dashboard" });
   };
 
   return (
@@ -54,11 +55,15 @@ function AuthPage() {
       <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-8 sm:px-5">
         <div className="panel animate-rise rounded-xl p-5 sm:p-7 md:p-8">
           <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-lg bg-primary font-display text-sm font-bold tracking-wide text-primary-foreground">
-              ZA
-            </span>
-            <div>
-              <p className="font-display text-lg font-semibold tracking-tight">ZA Stock</p>
+            <img
+              src="/brand/sfy-logo.jpg"
+              alt=""
+              className="size-12 shrink-0 rounded-full object-cover ring-1 ring-line"
+            />
+            <div className="min-w-0">
+              <p className="font-display text-lg font-semibold leading-tight tracking-tight">
+                Sweet for You Salvage
+              </p>
               <p className="text-sm text-soft">Stock & invoices</p>
             </div>
           </div>

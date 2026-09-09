@@ -20,13 +20,13 @@ import {
 export const Route = createFileRoute("/new-invoice")({
   head: () => ({
     meta: [
-      { title: "New Invoice · ZA Stock" },
+      { title: "New Invoice · Sweet for You Salvage" },
       {
         name: "description",
         content:
           "Build an invoice from current stock: pick products, set quantities and see the running total.",
       },
-      { property: "og:title", content: "New Invoice · ZA Stock" },
+      { property: "og:title", content: "New Invoice · Sweet for You Salvage" },
       {
         property: "og:description",
         content: "Create a customer invoice and reduce stock automatically.",
@@ -175,7 +175,7 @@ function NewInvoicePage() {
     <AppShell>
       <PageHeader eyebrow="Invoicing" title="New invoice" />
 
-      <section className="mt-4 grid gap-4 sm:mt-6 sm:gap-5 lg:grid-cols-12">
+      <section className="mt-3 grid gap-3 sm:gap-4 lg:grid-cols-12">
         <div className="panel rounded-xl p-4 sm:p-6 lg:col-span-7">
           <div>
             <label className={labelClass} htmlFor="customer">

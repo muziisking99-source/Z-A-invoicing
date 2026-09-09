@@ -12,8 +12,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system: "ZA Stock ledger"
- * Light zinc neutrals, single teal accent, Outfit + JetBrains Mono.
+ * Design system: Sweet for You Salvage
+ * Light zinc neutrals, bubblegum pink accent, black contrast, Outfit + JetBrains Mono.
  */
 
 @theme inline {
@@ -73,14 +73,14 @@
   --ease-out-soft: cubic-bezier(0, 0, 0.2, 1);
   --ease-in-soft: cubic-bezier(0.4, 0, 1, 1);
 
-  /* Zinc canvas + teal #0F766E accent */
+  /* Zinc canvas + deep rose #E11D48 accent */
   --canvas: #fafafa;
   --paper: #ffffff;
   --ink: #18181b;
   --soft: #52525b;
   --line: #e4e4e7;
-  --accent-ink: #0f766e;
-  --glow-pink: #f4f4f5;
+  --accent-ink: #be123c;
+  --glow-pink: #fff1f2;
   --glow-sky: #f4f4f5;
   --glow-violet: #f4f4f5;
 
@@ -90,19 +90,19 @@
   --card-foreground: var(--ink);
   --popover: var(--paper);
   --popover-foreground: var(--ink);
-  --primary: #0f766e;
-  --primary-foreground: #f0fdfa;
+  --primary: #e11d48;
+  --primary-foreground: #fff1f2;
   --secondary: #f4f4f5;
   --secondary-foreground: var(--ink);
   --muted: #f4f4f5;
   --muted-foreground: var(--soft);
-  --accent: #ccfbf1;
-  --accent-foreground: #115e59;
+  --accent: #ffe4e6;
+  --accent-foreground: #9f1239;
   --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
   --border: var(--line);
   --input: var(--line);
-  --ring: #0f766e;
+  --ring: #e11d48;
 
   --shadow-panel: 0 1px 2px rgb(24 24 27 / 0.04), 0 8px 24px -16px rgb(24 24 27 / 0.12);
 }
