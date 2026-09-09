@@ -121,7 +121,8 @@ export function ProductPicker({
                         active ? "text-primary-foreground/85" : "text-soft",
                       )}
                     >
-                      {product.quantity_on_hand} on hand · {money(product.selling_price)}
+                      {product.quantity_on_hand} on hand · Unit {money(product.selling_price)}
+                      {product.case_price > 0 ? ` · Case ${money(product.case_price)}` : ""}
                     </span>
                   </button>
                 </li>

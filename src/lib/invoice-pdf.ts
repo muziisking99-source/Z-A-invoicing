@@ -1,9 +1,12 @@
 import { money, shortDate } from "@/lib/format";
+import type { PriceBasis } from "@/lib/products";
 
 export type InvoicePdfItem = {
   product_name: string;
   quantity: number;
   unit_price: number;
+  case_price: number;
+  price_basis: PriceBasis;
   line_total: number;
 };
 
@@ -12,6 +15,7 @@ export type InvoicePdfData = {
   customer_name: string;
   created_at: string;
   total: number;
+  delivery_cost: number;
   items: InvoicePdfItem[];
 };
 
@@ -97,11 +101,14 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
   y += 20;
 
-  // Table header
-  const colDesc = left;
-  const colQty = left + contentW * 0.52;
-  const colUnit = left + contentW * 0.7;
-  const colTotal = right;
+  // Table columns — shared right edges so headers and values line up
+  const padX = 10;
+  const colDesc = left + padX;
+  const colQty = left + contentW * 0.5;
+  const colUnit = left + contentW * 0.66;
+  const colCase = left + contentW * 0.82;
+  const colTotal = right - padX;
+  const descMaxW = colQty - colDesc - 12;
   const rowH = 28;
 
   doc.setFillColor(...ROSE);
@@ -111,21 +118,26 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   doc.setFontSize(9);
   doc.setTextColor(...WHITE);
   const headerY = y + 18;
-  doc.text("Description", colDesc + 10, headerY);
+  doc.text("Description", colDesc, headerY);
   doc.text("Qty", colQty, headerY, { align: "right" });
-  doc.text("Unit Price", colUnit, headerY, { align: "right" });
-  doc.text("Total", colTotal - 10, headerY, { align: "right" });
+  doc.text("Unit", colUnit, headerY, { align: "right" });
+  doc.text("Case", colCase, headerY, { align: "right" });
+  doc.text("Total", colTotal, headerY, { align: "right" });
 
   y += rowH;
 
   // Line items
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   let alt = false;
 
   for (const item of invoice.items) {
-    const nameLines = doc.splitTextToSize(item.product_name, contentW * 0.48);
-    const blockH = Math.max(rowH, nameLines.length * 13 + 14);
+    const basisNote =
+      item.price_basis === "case" ? " (case price)" : " (unit price)";
+    const nameLines = doc.splitTextToSize(
+      `${item.product_name}${basisNote}`,
+      descMaxW,
+    );
+    const blockH = Math.max(rowH, nameLines.length * 12 + 14);
 
     if (y + blockH > pageH - 160) {
       doc.addPage();
@@ -146,12 +158,18 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
     const textY = y + 17;
     doc.setTextColor(...INK);
-    doc.text(nameLines, colDesc + 10, textY);
     doc.setFont("helvetica", "normal");
+    doc.text(nameLines, colDesc, textY);
     doc.text(String(item.quantity), colQty, textY, { align: "right" });
     doc.text(money(item.unit_price), colUnit, textY, { align: "right" });
+    doc.text(
+      item.case_price > 0 ? money(item.case_price) : "—",
+      colCase,
+      textY,
+      { align: "right" },
+    );
     doc.setFont("helvetica", "bold");
-    doc.text(money(item.line_total), colTotal - 10, textY, { align: "right" });
+    doc.text(money(item.line_total), colTotal, textY, { align: "right" });
     doc.setFont("helvetica", "normal");
 
     y += blockH;
@@ -176,7 +194,10 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   doc.setDrawColor(...LINE);
   doc.line(totalsX, y - 10, right, y - 10);
 
-  drawTotalRow("Subtotal", money(invoice.total));
+  drawTotalRow("Subtotal", money(invoice.total - (invoice.delivery_cost || 0)));
+  if ((invoice.delivery_cost || 0) > 0) {
+    drawTotalRow("Delivery", money(invoice.delivery_cost));
+  }
 
   doc.setFillColor(...ROSE);
   doc.rect(totalsX - 8, y - 14, right - totalsX + 8, 28, "F");

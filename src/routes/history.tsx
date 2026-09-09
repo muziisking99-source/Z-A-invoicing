@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { money, shortDate } from "@/lib/format";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
+import { cn } from "@/lib/utils";
+import type { PriceBasis } from "@/lib/products";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +42,7 @@ type Invoice = {
   invoice_number: string;
   customer_name: string;
   total: number;
+  delivery_cost: number;
   created_at: string;
 };
 
@@ -48,6 +51,8 @@ type InvoiceItem = {
   product_name: string;
   quantity: number;
   unit_price: number;
+  case_price: number;
+  price_basis: PriceBasis;
   line_total: number;
 };
 
@@ -65,12 +70,13 @@ function useInvoices() {
     queryFn: async (): Promise<Invoice[]> => {
       const { data, error } = await supabase
         .from("invoices")
-        .select("id, invoice_number, customer_name, total, created_at")
+        .select("id, invoice_number, customer_name, total, delivery_cost, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []).map((row) => ({
         ...row,
         total: Number(row.total),
+        delivery_cost: Number(row.delivery_cost ?? 0),
       })) as Invoice[];
     },
   });
@@ -83,13 +89,15 @@ function useInvoiceItems(invoiceId: string | null) {
     queryFn: async (): Promise<InvoiceItem[]> => {
       const { data, error } = await supabase
         .from("invoice_items")
-        .select("id, product_name, quantity, unit_price, line_total")
+        .select("id, product_name, quantity, unit_price, case_price, price_basis, line_total")
         .eq("invoice_id", invoiceId!)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return (data ?? []).map((row) => ({
         ...row,
         unit_price: Number(row.unit_price),
+        case_price: Number(row.case_price ?? 0),
+        price_basis: (row.price_basis === "case" ? "case" : "unit") as PriceBasis,
         line_total: Number(row.line_total),
       })) as InvoiceItem[];
     },
@@ -128,7 +136,15 @@ function HistoryPage() {
         customer_name: invoice.customer_name,
         created_at: invoice.created_at,
         total: invoice.total,
-        items: lineItems,
+        delivery_cost: invoice.delivery_cost,
+        items: lineItems.map((item) => ({
+          product_name: item.product_name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          case_price: item.case_price,
+          price_basis: item.price_basis,
+          line_total: item.line_total,
+        })),
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not create PDF");
@@ -289,27 +305,26 @@ function HistoryPage() {
               </DialogHeader>
 
               <div className="mt-2 overflow-x-auto rounded-lg border border-line">
-                <table className="w-full min-w-[20rem] text-left text-sm sm:text-base">
+                <table className="w-full min-w-[28rem] text-left text-sm sm:text-base">
                   <thead>
                     <tr className="border-b border-line bg-secondary text-xs font-semibold uppercase tracking-wide text-soft sm:text-sm">
                       <th className="px-3 py-2.5 sm:px-4 sm:py-3">Product</th>
                       <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Qty</th>
-                      <th className="hidden px-3 py-2.5 text-right sm:table-cell sm:px-4 sm:py-3">
-                        Unit
-                      </th>
+                      <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Unit</th>
+                      <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Case</th>
                       <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Line</th>
                     </tr>
                   </thead>
                   <tbody>
                     {itemsLoading ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-8">
+                        <td colSpan={5} className="px-4 py-8">
                           <div className="skeleton-bar mx-auto h-5 w-2/3" />
                         </td>
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-soft">
+                        <td colSpan={5} className="px-4 py-8 text-center text-soft">
                           No line items
                         </td>
                       </tr>
@@ -317,13 +332,33 @@ function HistoryPage() {
                       items.map((item) => (
                         <tr key={item.id} className="border-b border-line/60 last:border-0">
                           <td className="px-3 py-2.5 font-medium sm:px-4 sm:py-3">
-                            {item.product_name}
+                            <span>{item.product_name}</span>
+                            <span className="mt-0.5 block text-xs font-normal text-soft">
+                              Charged at {item.price_basis === "case" ? "case" : "unit"} price
+                            </span>
                           </td>
                           <td className="tabular px-3 py-2.5 text-right font-mono sm:px-4 sm:py-3">
                             {item.quantity}
                           </td>
-                          <td className="tabular hidden px-3 py-2.5 text-right font-mono text-soft sm:table-cell sm:px-4 sm:py-3">
+                          <td
+                            className={cn(
+                              "tabular px-3 py-2.5 text-right font-mono sm:px-4 sm:py-3",
+                              item.price_basis === "unit"
+                                ? "font-semibold text-accent-ink"
+                                : "text-soft",
+                            )}
+                          >
                             {money(item.unit_price)}
+                          </td>
+                          <td
+                            className={cn(
+                              "tabular px-3 py-2.5 text-right font-mono sm:px-4 sm:py-3",
+                              item.price_basis === "case"
+                                ? "font-semibold text-accent-ink"
+                                : "text-soft",
+                            )}
+                          >
+                            {item.case_price > 0 ? money(item.case_price) : "—"}
                           </td>
                           <td className="tabular px-3 py-2.5 text-right font-mono font-semibold sm:px-4 sm:py-3">
                             {money(item.line_total)}
@@ -337,6 +372,22 @@ function HistoryPage() {
 
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
+                  {selected.delivery_cost > 0 ? (
+                    <dl className="mb-2 space-y-1 text-sm text-soft">
+                      <div className="flex gap-3">
+                        <dt>Subtotal</dt>
+                        <dd className="font-mono tabular-nums text-ink">
+                          {money(selected.total - selected.delivery_cost)}
+                        </dd>
+                      </div>
+                      <div className="flex gap-3">
+                        <dt>Delivery</dt>
+                        <dd className="font-mono tabular-nums text-ink">
+                          {money(selected.delivery_cost)}
+                        </dd>
+                      </div>
+                    </dl>
+                  ) : null}
                   <p className="text-sm font-medium uppercase tracking-[0.12em] text-soft">
                     Total
                   </p>

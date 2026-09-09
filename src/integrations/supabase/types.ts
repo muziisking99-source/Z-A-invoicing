@@ -16,30 +16,36 @@ export type Database = {
     Tables: {
       invoice_items: {
         Row: {
+          case_price: number
           created_at: string
           id: string
           invoice_id: string
           line_total: number
+          price_basis: string
           product_id: string | null
           product_name: string
           quantity: number
           unit_price: number
         }
         Insert: {
+          case_price?: number
           created_at?: string
           id?: string
           invoice_id: string
           line_total: number
+          price_basis?: string
           product_id?: string | null
           product_name: string
           quantity: number
           unit_price: number
         }
         Update: {
+          case_price?: number
           created_at?: string
           id?: string
           invoice_id?: string
           line_total?: number
+          price_basis?: string
           product_id?: string | null
           product_name?: string
           quantity?: number
@@ -66,6 +72,7 @@ export type Database = {
         Row: {
           created_at: string
           customer_name: string
+          delivery_cost: number
           id: string
           invoice_number: string
           total: number
@@ -73,6 +80,7 @@ export type Database = {
         Insert: {
           created_at?: string
           customer_name: string
+          delivery_cost?: number
           id?: string
           invoice_number: string
           total?: number
@@ -80,6 +88,7 @@ export type Database = {
         Update: {
           created_at?: string
           customer_name?: string
+          delivery_cost?: number
           id?: string
           invoice_number?: string
           total?: number
@@ -88,6 +97,7 @@ export type Database = {
       }
       products: {
         Row: {
+          case_price: number
           cost_price: number
           created_at: string
           id: string
@@ -96,6 +106,7 @@ export type Database = {
           selling_price: number
         }
         Insert: {
+          case_price?: number
           cost_price?: number
           created_at?: string
           id?: string
@@ -104,6 +115,7 @@ export type Database = {
           selling_price?: number
         }
         Update: {
+          case_price?: number
           cost_price?: number
           created_at?: string
           id?: string
@@ -119,10 +131,15 @@ export type Database = {
     }
     Functions: {
       create_invoice: {
-        Args: { p_customer_name: string; p_items: Json }
+        Args: {
+          p_customer_name: string
+          p_items: Json
+          p_delivery_cost?: number
+        }
         Returns: {
           created_at: string
           customer_name: string
+          delivery_cost: number
           id: string
           invoice_number: string
           total: number

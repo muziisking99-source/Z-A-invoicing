@@ -152,11 +152,21 @@ function StockPage() {
                   <dd className="font-medium tabular-nums">{money(product.cost_price)}</dd>
                 </div>
                 <div>
-                  <dt className="text-soft">Sell</dt>
+                  <dt className="text-soft">On hand</dt>
+                  <dd className="font-medium tabular-nums">{product.quantity_on_hand}</dd>
+                </div>
+                <div>
+                  <dt className="text-soft">Unit price</dt>
                   <dd className="font-medium tabular-nums">{money(product.selling_price)}</dd>
                 </div>
+                <div>
+                  <dt className="text-soft">Case price</dt>
+                  <dd className="font-medium tabular-nums">
+                    {product.case_price > 0 ? money(product.case_price) : "—"}
+                  </dd>
+                </div>
                 <div className="col-span-2">
-                  <dt className="text-soft">Value</dt>
+                  <dt className="text-soft">Value (unit)</dt>
                   <dd className="font-semibold tabular-nums text-accent-ink">
                     {money(product.quantity_on_hand * product.selling_price)}
                   </dd>
@@ -189,12 +199,13 @@ function StockPage() {
       {/* Desktop table */}
       <section className="panel mt-3 hidden overflow-hidden rounded-xl md:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-base">
+          <table className="w-full min-w-[800px] border-collapse text-base">
             <thead>
               <tr className="sticky top-0 z-[1] border-b border-line bg-secondary text-left text-sm font-semibold uppercase tracking-wide text-soft">
                 <th className="px-5 py-3.5">Name</th>
                 <th className="px-5 py-3.5 text-right">Cost</th>
-                <th className="px-5 py-3.5 text-right">Sell</th>
+                <th className="px-5 py-3.5 text-right">Unit</th>
+                <th className="px-5 py-3.5 text-right">Case</th>
                 <th className="px-5 py-3.5 text-right">On hand</th>
                 <th className="px-5 py-3.5 text-right">Value</th>
                 <th className="px-5 py-3.5" />
@@ -204,14 +215,14 @@ function StockPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-line/80 last:border-0">
-                    <td className="px-5 py-4" colSpan={6}>
+                    <td className="px-5 py-4" colSpan={7}>
                       <div className="skeleton-bar h-5 w-full max-w-xl" />
                     </td>
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-14 text-center text-soft">
+                  <td colSpan={7} className="px-5 py-14 text-center text-soft">
                     {products.length === 0
                       ? "No products yet — add your first one."
                       : "No products match that search."}
@@ -230,6 +241,9 @@ function StockPage() {
                     </td>
                     <td className="px-5 py-4 text-right font-mono text-[15px]">
                       {money(product.selling_price)}
+                    </td>
+                    <td className="px-5 py-4 text-right font-mono text-[15px]">
+                      {product.case_price > 0 ? money(product.case_price) : "—"}
                     </td>
                     <td
                       className={`px-5 py-4 text-right font-mono text-[15px] font-semibold ${
@@ -318,6 +332,7 @@ function AddProductDialog({
   const [name, setName] = useState("");
   const [cost, setCost] = useState("");
   const [sell, setSell] = useState("");
+  const [casePrice, setCasePrice] = useState("");
 
   const save = useMutation({
     mutationFn: async () => {
@@ -325,6 +340,7 @@ function AddProductDialog({
         name: name.trim(),
         cost_price: Number(cost || 0),
         selling_price: Number(sell || 0),
+        case_price: Number(casePrice || 0),
       });
       if (error) throw error;
     },
@@ -333,6 +349,7 @@ function AddProductDialog({
       setName("");
       setCost("");
       setSell("");
+      setCasePrice("");
       onOpenChange(false);
       onSaved();
     },
@@ -368,7 +385,7 @@ function AddProductDialog({
               className={fieldClass}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div>
               <label className={labelClass} htmlFor="p-cost">
                 Cost price
@@ -385,7 +402,7 @@ function AddProductDialog({
             </div>
             <div>
               <label className={labelClass} htmlFor="p-sell">
-                Selling price
+                Unit price
               </label>
               <input
                 id="p-sell"
@@ -394,6 +411,20 @@ function AddProductDialog({
                 step="0.01"
                 value={sell}
                 onChange={(e) => setSell(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className={labelClass} htmlFor="p-case">
+                Case price
+              </label>
+              <input
+                id="p-case"
+                type="number"
+                min="0"
+                step="0.01"
+                value={casePrice}
+                onChange={(e) => setCasePrice(e.target.value)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -421,6 +452,7 @@ function EditProductDialog({
   const [name, setName] = useState("");
   const [cost, setCost] = useState("");
   const [sell, setSell] = useState("");
+  const [casePrice, setCasePrice] = useState("");
   const [loadedId, setLoadedId] = useState<string | null>(null);
 
   if (product && product.id !== loadedId) {
@@ -428,6 +460,7 @@ function EditProductDialog({
     setName(product.name);
     setCost(String(product.cost_price));
     setSell(String(product.selling_price));
+    setCasePrice(String(product.case_price ?? 0));
   }
 
   const save = useMutation({
@@ -438,6 +471,7 @@ function EditProductDialog({
           name: name.trim(),
           cost_price: Number(cost || 0),
           selling_price: Number(sell || 0),
+          case_price: Number(casePrice || 0),
         })
         .eq("id", product!.id);
       if (error) throw error;
@@ -479,7 +513,7 @@ function EditProductDialog({
               className={fieldClass}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div>
               <label className={labelClass} htmlFor="e-cost">
                 Cost price
@@ -496,7 +530,7 @@ function EditProductDialog({
             </div>
             <div>
               <label className={labelClass} htmlFor="e-sell">
-                Selling price
+                Unit price
               </label>
               <input
                 id="e-sell"
@@ -505,6 +539,20 @@ function EditProductDialog({
                 step="0.01"
                 value={sell}
                 onChange={(e) => setSell(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className={labelClass} htmlFor="e-case">
+                Case price
+              </label>
+              <input
+                id="e-case"
+                type="number"
+                min="0"
+                step="0.01"
+                value={casePrice}
+                onChange={(e) => setCasePrice(e.target.value)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>

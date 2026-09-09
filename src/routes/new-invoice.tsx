@@ -6,8 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { money } from "@/lib/format";
 import { downloadInvoicePdf, type InvoicePdfData } from "@/lib/invoice-pdf";
-import { useProducts, type Product } from "@/lib/products";
+import { useProducts, chargePrice, type PriceBasis, type Product } from "@/lib/products";
 import { ProductPicker } from "@/components/ProductPicker";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -38,12 +39,13 @@ export const Route = createFileRoute("/new-invoice")({
   component: NewInvoicePage,
 });
 
-type Line = { key: string; productId: string; quantity: string };
+type Line = { key: string; productId: string; quantity: string; priceBasis: PriceBasis };
 
 const newLine = (): Line => ({
   key: Math.random().toString(36).slice(2),
   productId: "",
   quantity: "1",
+  priceBasis: "unit",
 });
 
 const fieldClass =
@@ -59,6 +61,7 @@ function NewInvoicePage() {
   const queryClient = useQueryClient();
   const { data: products = [] } = useProducts();
   const [customer, setCustomer] = useState("");
+  const [delivery, setDelivery] = useState("");
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [savedPdf, setSavedPdf] = useState<InvoicePdfData | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -82,23 +85,57 @@ function NewInvoicePage() {
     const qty = Number(line.quantity);
     const quantity = Number.isFinite(qty) ? Math.floor(qty) : 0;
     const unitPrice = product?.selling_price ?? 0;
+    const casePrice = product?.case_price ?? 0;
+    const canUseCase = casePrice > 0;
+    const priceBasis: PriceBasis =
+      line.priceBasis === "case" && canUseCase ? "case" : "unit";
+    const charge = product ? chargePrice(product, priceBasis) : 0;
     const demanded = product ? (demandByProduct.get(product.id) ?? 0) : 0;
     const shortfall = !!product && demanded > product.quantity_on_hand;
-    return { line, product, quantity, unitPrice, amount: quantity * unitPrice, shortfall, demanded };
+    return {
+      line,
+      product,
+      quantity,
+      unitPrice,
+      casePrice,
+      priceBasis,
+      canUseCase,
+      charge,
+      amount: quantity * charge,
+      shortfall,
+      demanded,
+    };
   });
 
-  const total = resolved.reduce((sum, row) => sum + row.amount, 0);
+  const subtotal = resolved.reduce((sum, row) => sum + row.amount, 0);
+  const deliveryCost = (() => {
+    const n = Number(delivery);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })();
+  const total = subtotal + deliveryCost;
   const filledLines = resolved.filter((row) => row.product && row.quantity > 0);
 
   const save = useMutation({
     mutationFn: async () => {
+      const caseWithoutPrice = filledLines.find(
+        (row) => row.priceBasis === "case" && row.casePrice <= 0,
+      );
+      if (caseWithoutPrice) {
+        throw new Error(`Case price is not set for ${caseWithoutPrice.product!.name}`);
+      }
+      if (deliveryCost < 0) {
+        throw new Error("Delivery cost cannot be negative");
+      }
       const snapshot = {
         customer_name: customer.trim(),
         total,
+        delivery_cost: deliveryCost,
         items: filledLines.map((row) => ({
           product_name: row.product!.name,
           quantity: row.quantity,
           unit_price: row.unitPrice,
+          case_price: row.casePrice,
+          price_basis: row.priceBasis,
           line_total: row.amount,
         })),
       };
@@ -107,7 +144,9 @@ function NewInvoicePage() {
         p_items: filledLines.map((row) => ({
           product_id: row.product!.id,
           quantity: row.quantity,
+          price_basis: row.priceBasis,
         })),
+        p_delivery_cost: deliveryCost,
       });
       if (error) throw error;
       const invoice = data as {
@@ -115,12 +154,14 @@ function NewInvoicePage() {
         created_at: string;
         customer_name: string;
         total: number;
+        delivery_cost: number;
       };
       return {
         invoice_number: invoice.invoice_number,
         customer_name: invoice.customer_name || snapshot.customer_name,
         created_at: invoice.created_at || new Date().toISOString(),
         total: Number(invoice.total ?? snapshot.total),
+        delivery_cost: Number(invoice.delivery_cost ?? deliveryCost),
         items: snapshot.items,
       } satisfies InvoicePdfData;
     },
@@ -130,6 +171,7 @@ function NewInvoicePage() {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       setSavedPdf(pdfData);
       setCustomer("");
+      setDelivery("");
       setLines([newLine()]);
     },
     onError: (error: Error) => toast.error(error.message),
@@ -232,31 +274,94 @@ function NewInvoicePage() {
                         onChange={(productId) =>
                           setLines((prev) =>
                             prev.map((l) =>
-                              l.key === row.line.key ? { ...l, productId } : l,
+                              l.key === row.line.key
+                                ? { ...l, productId, priceBasis: "unit" }
+                                : l,
                             ),
                           )
                         }
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      <div className="min-w-0">
-                        <p className="mb-1.5 text-sm font-medium text-soft">Unit price</p>
-                        <div className="flex h-12 items-center rounded-lg border border-line bg-secondary/70 px-3 text-sm font-medium tabular-nums text-ink sm:h-[50px] sm:text-base">
-                          {row.product ? money(row.unitPrice) : "—"}
-                        </div>
+                    <div>
+                      <p className="mb-1.5 text-sm font-medium text-soft">Price</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.line.key ? { ...l, priceBasis: "unit" } : l,
+                              ),
+                            )
+                          }
+                          className={cn(
+                            "btn-press rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors",
+                            row.priceBasis === "unit"
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-line bg-paper text-ink hover:bg-secondary",
+                          )}
+                        >
+                          <span className="block">Unit</span>
+                          <span
+                            className={cn(
+                              "font-mono text-xs tabular-nums",
+                              row.priceBasis === "unit"
+                                ? "text-primary-foreground/90"
+                                : "text-soft",
+                            )}
+                          >
+                            {row.product ? money(row.unitPrice) : "—"}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!row.canUseCase}
+                          title={
+                            row.product && !row.canUseCase
+                              ? "Set a case price on this product first"
+                              : undefined
+                          }
+                          onClick={() =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.line.key ? { ...l, priceBasis: "case" } : l,
+                              ),
+                            )
+                          }
+                          className={cn(
+                            "btn-press rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                            row.priceBasis === "case"
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-line bg-paper text-ink hover:bg-secondary",
+                          )}
+                        >
+                          <span className="block">Case</span>
+                          <span
+                            className={cn(
+                              "font-mono text-xs tabular-nums",
+                              row.priceBasis === "case"
+                                ? "text-primary-foreground/90"
+                                : "text-soft",
+                            )}
+                          >
+                            {row.product && row.canUseCase ? money(row.casePrice) : "—"}
+                          </span>
+                        </button>
                       </div>
+                    </div>
 
+                    <div className="grid grid-cols-2 gap-3">
                       <div className="min-w-0">
                         <label
                           className="mb-1.5 block text-sm font-medium text-soft"
                           htmlFor={`qty-${row.line.key}`}
                         >
-                          Qty
+                          Qty (units)
                         </label>
                         <input
                           id={`qty-${row.line.key}`}
-                          aria-label="Quantity"
+                          aria-label="Quantity in units"
                           type="number"
                           min="1"
                           step="1"
@@ -275,7 +380,7 @@ function NewInvoicePage() {
                         />
                       </div>
 
-                      <div className="col-span-2 min-w-0 sm:col-span-1">
+                      <div className="min-w-0">
                         <p className="mb-1.5 text-sm font-medium text-soft">Line total</p>
                         <div className="flex h-12 items-center justify-end rounded-lg border border-line bg-secondary/70 px-3 text-base font-semibold tabular-nums text-accent-ink sm:h-[50px]">
                           {money(row.amount)}
@@ -315,13 +420,29 @@ function NewInvoicePage() {
           <dl className="tabular mt-4 space-y-3 text-base sm:mt-5">
             <div className="flex justify-between">
               <dt className="text-soft">Subtotal</dt>
-              <dd className="font-mono font-medium">{money(total)}</dd>
+              <dd className="font-mono font-medium">{money(subtotal)}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-soft">Lines</dt>
               <dd className="font-mono font-medium">{filledLines.length}</dd>
             </div>
           </dl>
+          <div className="mt-4">
+            <label className={labelClass} htmlFor="delivery">
+              Delivery cost
+            </label>
+            <input
+              id="delivery"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={delivery}
+              onChange={(e) => setDelivery(e.target.value)}
+              className={`mt-1.5 ${fieldClass} tabular font-mono`}
+            />
+          </div>
           <div className="mt-4 flex items-end justify-between border-t border-line pt-4 sm:mt-5 sm:pt-5">
             <span className="text-base font-medium text-soft">Total</span>
             <span
