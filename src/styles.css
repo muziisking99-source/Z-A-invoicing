@@ -1,3 +1,10 @@
+@import "@fontsource/outfit/400.css";
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
@@ -5,14 +12,13 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system: "Pastel glass ledger"
- * Soft pastel canvas, frosted glass panels, coral accent, tabular figures.
- * All colors are oklch semantic tokens. Never hardcode colors in components.
+ * Design system: "ZA Stock ledger"
+ * Light zinc neutrals, single teal accent, Outfit + JetBrains Mono.
  */
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 8px);
-  --radius-md: calc(var(--radius) - 4px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
@@ -57,21 +63,26 @@
 }
 
 :root {
-  --radius: 1rem;
+  --radius: 0.625rem;
 
-  --font-display-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-body-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono-family: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display-family: "Outfit", system-ui, sans-serif;
+  --font-body-family: "Outfit", system-ui, sans-serif;
+  --font-mono-family: "JetBrains Mono", ui-monospace, monospace;
 
-  --canvas: oklch(0.955 0.014 264);
-  --paper: oklch(0.995 0.002 240);
-  --ink: oklch(0.263 0.032 268);
-  --soft: oklch(0.512 0.035 268);
-  --line: oklch(0.908 0.014 265);
-  --accent-ink: oklch(0.552 0.163 8);
-  --glow-pink: oklch(0.86 0.07 5);
-  --glow-sky: oklch(0.86 0.07 235);
-  --glow-violet: oklch(0.85 0.07 295);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-soft: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-soft: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Zinc canvas + teal #0F766E accent */
+  --canvas: #fafafa;
+  --paper: #ffffff;
+  --ink: #18181b;
+  --soft: #52525b;
+  --line: #e4e4e7;
+  --accent-ink: #0f766e;
+  --glow-pink: #f4f4f5;
+  --glow-sky: #f4f4f5;
+  --glow-violet: #f4f4f5;
 
   --background: var(--canvas);
   --foreground: var(--ink);
@@ -79,21 +90,21 @@
   --card-foreground: var(--ink);
   --popover: var(--paper);
   --popover-foreground: var(--ink);
-  --primary: oklch(0.735 0.157 8);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.975 0.008 264);
+  --primary: #0f766e;
+  --primary-foreground: #f0fdfa;
+  --secondary: #f4f4f5;
   --secondary-foreground: var(--ink);
-  --muted: oklch(0.965 0.01 264);
+  --muted: #f4f4f5;
   --muted-foreground: var(--soft);
-  --accent: oklch(0.735 0.157 8);
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.577 0.212 20);
-  --destructive-foreground: oklch(1 0 0);
+  --accent: #ccfbf1;
+  --accent-foreground: #115e59;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
   --border: var(--line);
   --input: var(--line);
-  --ring: oklch(0.735 0.157 8);
+  --ring: #0f766e;
 
-  --shadow-panel: 0 20px 40px -24px oklch(0.55 0.05 265 / 0.28);
+  --shadow-panel: 0 1px 2px rgb(24 24 27 / 0.04), 0 8px 24px -16px rgb(24 24 27 / 0.12);
 }
 
 @layer base {
@@ -101,19 +112,42 @@
     border-color: var(--color-border);
   }
 
+  html {
+    font-size: 16px;
+  }
+
+  @media (min-width: 640px) {
+    html {
+      font-size: 17px;
+    }
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-body-family);
+    font-size: 1rem;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    cursor: pointer;
   }
 }
 
 @utility glass {
-  border: 1px solid oklch(1 0 0 / 0.5);
-  background-color: oklch(1 0 0 / 0.55);
+  border: 1px solid var(--line);
+  background-color: var(--paper);
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(20px);
+}
+
+@utility panel {
+  border: 1px solid var(--line);
+  background-color: var(--paper);
+  box-shadow: var(--shadow-panel);
 }
 
 @utility tabular {
@@ -123,7 +157,7 @@
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -134,7 +168,7 @@
 @keyframes pop {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.97);
   }
   to {
     opacity: 1;
@@ -142,10 +176,71 @@
   }
 }
 
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 @utility animate-rise {
-  animation: rise 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: rise 200ms var(--ease-out-soft) both;
 }
 
 @utility animate-pop {
-  animation: pop 0.4s cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: pop 150ms var(--ease-out-soft) both;
+}
+
+@utility row-enter {
+  animation: rise 180ms var(--ease-out-soft) both;
+}
+
+@utility btn-press {
+  transition:
+    background-color 150ms var(--ease-out-soft),
+    color 150ms var(--ease-out-soft),
+    border-color 150ms var(--ease-out-soft),
+    opacity 150ms var(--ease-out-soft),
+    transform 120ms var(--ease-out-soft);
+}
+
+@layer utilities {
+  .btn-press:active {
+    transform: scale(0.98);
+  }
+
+  .skeleton-bar {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    background-color: var(--muted);
+  }
+
+  .skeleton-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+    animation: shimmer 1.2s var(--ease-standard) infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-rise,
+  .animate-pop,
+  .row-enter,
+  .skeleton-bar::after {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

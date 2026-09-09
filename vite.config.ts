@@ -1,15 +1,59 @@
-// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
-// or the app will break with duplicate plugins:
-//   - TanStack devtools (dev-only, first), tanstackStart, viteReact, tailwindcss, tsConfigPaths,
-//     nitro (build-only using cloudflare as a default target), VITE_* env injection, @ path alias,
-//     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
-// You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
+// @lovable.dev/vite-tanstack-config already includes TanStack Start, React,
+// Tailwind, path aliases, and Nitro. Pass extra Vite knobs via `vite: {}`.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
     server: { entry: "server" },
+  },
+  vite: {
+    resolve: {
+      tsconfigPaths: true,
+    },
+    optimizeDeps: {
+      // Don't block "ready" on a full dependency crawl (Vite 6+/8).
+      holdUntilCrawlEnd: false,
+      include: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "@tanstack/react-router",
+        "@tanstack/react-query",
+        "@supabase/supabase-js",
+        "sonner",
+        "@radix-ui/react-dialog",
+        "clsx",
+        "tailwind-merge",
+      ],
+      exclude: ["jspdf"],
+    },
+    server: {
+      warmup: {
+        clientFiles: [
+          "./src/routes/__root.tsx",
+          "./src/routes/index.tsx",
+          "./src/routes/auth.tsx",
+          "./src/styles.css",
+        ],
+      },
+    },
+    build: {
+      target: "es2022",
+      cssCodeSplit: true,
+      modulePreload: { polyfill: false },
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("node_modules/jspdf")) return "pdf";
+            if (id.includes("node_modules/@supabase")) return "supabase";
+            if (id.includes("node_modules/@tanstack")) return "tanstack";
+            if (id.includes("node_modules/react-dom") || id.includes("node_modules/react/")) {
+              return "react";
+            }
+            return undefined;
+          },
+        },
+      },
+    },
   },
 });

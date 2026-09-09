@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { money } from "@/lib/format";
+import { useProducts, type Product } from "@/lib/products";
 import {
   Dialog,
   DialogContent,
@@ -17,13 +18,13 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Current Stock · Marrow Stock & Invoicing" },
+      { title: "Current Stock · ZA Stock" },
       {
         name: "description",
         content:
           "See every product with cost price, selling price and quantity on hand. Add products and top up stock.",
       },
-      { property: "og:title", content: "Current Stock · Marrow" },
+      { property: "og:title", content: "Current Stock · ZA Stock" },
       {
         property: "og:description",
         content: "Product stock levels, cost and selling prices in one ledger.",
@@ -35,39 +36,13 @@ export const Route = createFileRoute("/")({
   component: StockPage,
 });
 
-export type Product = {
-  id: string;
-  name: string;
-  cost_price: number;
-  selling_price: number;
-  quantity_on_hand: number;
-  created_at: string;
-};
-
-export function useProducts() {
-  return useQuery({
-    queryKey: ["products"],
-    queryFn: async (): Promise<Product[]> => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return (data ?? []).map((row) => ({
-        ...row,
-        cost_price: Number(row.cost_price),
-        selling_price: Number(row.selling_price),
-      })) as Product[];
-    },
-  });
-}
-
 const fieldClass =
-  "mt-1 w-full rounded-2xl border border-line bg-paper/70 px-3 py-2 text-sm outline-none focus:border-primary/50";
-const labelClass = "font-mono text-[10px] uppercase tracking-[0.15em] text-soft";
+  "mt-1.5 w-full rounded-lg border border-line bg-paper px-4 py-3 text-base outline-none transition duration-150 focus:border-primary focus:ring-2 focus:ring-ring/25";
+const labelClass = "text-sm font-medium text-soft";
 const primaryBtn =
-  "rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-105 disabled:opacity-60";
-const ghostBtn = "rounded-2xl border border-line px-4 py-2 text-sm font-medium text-soft";
+  "btn-press w-full rounded-lg bg-primary px-5 py-3 text-base font-semibold text-primary-foreground disabled:opacity-60 sm:w-auto";
+const ghostBtn =
+  "btn-press w-full rounded-lg border border-line bg-paper px-5 py-3 text-base font-medium text-ink hover:bg-secondary sm:w-auto";
 
 function StockPage() {
   const queryClient = useQueryClient();
@@ -109,81 +84,175 @@ function StockPage() {
   return (
     <AppShell>
       <PageHeader eyebrow="Stock ledger" title="Products & inventory">
-        <div className="flex items-center gap-2 rounded-2xl border border-paper/60 bg-paper/60 px-3 py-2 backdrop-blur-xl">
-          <span className="font-mono text-xs text-soft">/</span>
+        <div className="flex w-full items-center gap-2 rounded-lg border border-line bg-paper px-3 py-2.5 sm:min-w-[14rem] sm:flex-1 sm:px-4 sm:py-3 lg:max-w-xs lg:flex-none">
           <input
             aria-label="Search products"
             placeholder="Search products…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-36 bg-transparent text-sm outline-none placeholder:text-soft/70 sm:w-40"
+            className="w-full bg-transparent text-base outline-none placeholder:text-soft/80"
           />
         </div>
-        <button className={ghostBtn} onClick={() => setStockOpen(true)}>
-          Add stock
-        </button>
-        <button className={primaryBtn} onClick={() => setAddOpen(true)}>
-          Add product
-        </button>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+          <button type="button" className={ghostBtn} onClick={() => setStockOpen(true)}>
+            Add stock
+          </button>
+          <button type="button" className={primaryBtn} onClick={() => setAddOpen(true)}>
+            Add product
+          </button>
+        </div>
       </PageHeader>
 
-      <section className="glass animate-rise mt-5 overflow-hidden rounded-3xl">
+      <div className="panel mt-4 grid grid-cols-2 divide-x divide-line overflow-hidden rounded-xl sm:mt-6">
+        <div className="px-3 py-3 sm:px-5 sm:py-4">
+          <p className="text-xs font-medium text-soft sm:text-sm">Units on hand</p>
+          <p className="tabular mt-1 font-mono text-xl font-semibold tracking-tight text-ink sm:text-2xl">
+            {isLoading ? "—" : totals.units.toLocaleString("en-ZA")}
+          </p>
+        </div>
+        <div className="px-3 py-3 sm:px-5 sm:py-4">
+          <p className="text-xs font-medium text-soft sm:text-sm">Stock value</p>
+          <p className="tabular mt-1 break-all font-mono text-xl font-semibold tracking-tight text-accent-ink sm:text-2xl">
+            {isLoading ? "—" : money(totals.value)}
+          </p>
+        </div>
+      </div>
+
+      {/* Mobile cards */}
+      <section className="mt-4 space-y-3 md:hidden">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="panel rounded-xl p-4">
+              <div className="skeleton-bar h-5 w-2/3" />
+              <div className="skeleton-bar mt-3 h-4 w-full" />
+            </div>
+          ))
+        ) : filtered.length === 0 ? (
+          <div className="panel rounded-xl px-4 py-10 text-center text-soft">
+            {products.length === 0
+              ? "No products yet — add your first one."
+              : "No products match that search."}
+          </div>
+        ) : (
+          filtered.map((product) => (
+            <article key={product.id} className="panel rounded-xl p-4">
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="min-w-0 text-lg font-semibold text-ink">{product.name}</h2>
+                <p
+                  className={`shrink-0 font-mono text-sm font-semibold ${
+                    product.quantity_on_hand === 0 ? "text-destructive" : "text-ink"
+                  }`}
+                >
+                  {product.quantity_on_hand} on hand
+                </p>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <dt className="text-soft">Cost</dt>
+                  <dd className="font-medium tabular-nums">{money(product.cost_price)}</dd>
+                </div>
+                <div>
+                  <dt className="text-soft">Sell</dt>
+                  <dd className="font-medium tabular-nums">{money(product.selling_price)}</dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-soft">Value</dt>
+                  <dd className="font-semibold tabular-nums text-accent-ink">
+                    {money(product.quantity_on_hand * product.selling_price)}
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditing(product)}
+                  className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleting(product)}
+                  className="btn-press rounded-lg border border-destructive/30 px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/5"
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+        <p className="px-1 text-sm text-soft">
+          {filtered.length} of {products.length} products
+        </p>
+      </section>
+
+      {/* Desktop table */}
+      <section className="panel mt-4 hidden overflow-hidden rounded-xl md:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
+          <table className="w-full min-w-[720px] border-collapse text-base">
             <thead>
-              <tr className="bg-paper/70 text-left font-mono text-[10px] uppercase tracking-[0.15em] text-soft">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 text-right font-medium">Cost</th>
-                <th className="px-4 py-3 text-right font-medium">Sell</th>
-                <th className="px-4 py-3 text-right font-medium">On hand</th>
-                <th className="px-4 py-3 text-right font-medium">Value</th>
-                <th className="px-4 py-3" />
+              <tr className="sticky top-0 z-[1] border-b border-line bg-secondary text-left text-sm font-semibold uppercase tracking-wide text-soft">
+                <th className="px-5 py-3.5">Name</th>
+                <th className="px-5 py-3.5 text-right">Cost</th>
+                <th className="px-5 py-3.5 text-right">Sell</th>
+                <th className="px-5 py-3.5 text-right">On hand</th>
+                <th className="px-5 py-3.5 text-right">Value</th>
+                <th className="px-5 py-3.5" />
               </tr>
             </thead>
-            <tbody className="tabular font-mono text-[13px]">
+            <tbody className="tabular">
               {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-soft">
-                    Loading products…
-                  </td>
-                </tr>
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-b border-line/80 last:border-0">
+                    <td className="px-5 py-4" colSpan={6}>
+                      <div className="skeleton-bar h-5 w-full max-w-xl" />
+                    </td>
+                  </tr>
+                ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-soft">
+                  <td colSpan={6} className="px-5 py-14 text-center text-soft">
                     {products.length === 0
                       ? "No products yet — add your first one."
                       : "No products match that search."}
                   </td>
                 </tr>
               ) : (
-                filtered.map((product) => (
+                filtered.map((product, index) => (
                   <tr
                     key={product.id}
-                    className="border-t border-line/80 transition hover:bg-primary/[0.07]"
+                    className="row-enter border-b border-line/80 transition-colors duration-150 last:border-0 hover:bg-secondary/80"
+                    style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
                   >
-                    <td className="px-4 py-3 font-body font-medium text-ink">{product.name}</td>
-                    <td className="px-4 py-3 text-right text-soft">{money(product.cost_price)}</td>
-                    <td className="px-4 py-3 text-right">{money(product.selling_price)}</td>
+                    <td className="px-5 py-4 text-lg font-medium text-ink">{product.name}</td>
+                    <td className="px-5 py-4 text-right font-mono text-[15px] text-soft">
+                      {money(product.cost_price)}
+                    </td>
+                    <td className="px-5 py-4 text-right font-mono text-[15px]">
+                      {money(product.selling_price)}
+                    </td>
                     <td
-                      className={`px-4 py-3 text-right ${
-                        product.quantity_on_hand === 0 ? "text-accent-ink" : ""
+                      className={`px-5 py-4 text-right font-mono text-[15px] font-semibold ${
+                        product.quantity_on_hand === 0 ? "text-destructive" : ""
                       }`}
                     >
                       {product.quantity_on_hand}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-ink">
+                    <td className="px-5 py-4 text-right font-mono text-[15px] font-semibold text-ink">
                       {money(product.quantity_on_hand * product.selling_price)}
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
                       <button
+                        type="button"
                         onClick={() => setEditing(product)}
-                        className="rounded-full border border-line px-2 py-0.5 text-[11px] text-soft transition hover:text-ink"
+                        className="btn-press rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-secondary"
                       >
                         Edit
                       </button>
                       <button
+                        type="button"
                         onClick={() => setDeleting(product)}
-                        className="ml-2 rounded-full border border-primary/40 px-2 py-0.5 text-[11px] text-accent-ink"
+                        className="btn-press ml-2 rounded-md border border-destructive/30 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/5"
                       >
                         Delete
                       </button>
@@ -194,11 +263,11 @@ function StockPage() {
             </tbody>
           </table>
         </div>
-        <div className="tabular flex items-center justify-between border-t border-line/80 bg-paper/50 px-4 py-3 font-mono text-[11px] text-soft">
+        <div className="tabular flex flex-wrap items-center justify-between gap-2 border-t border-line bg-secondary/60 px-5 py-3.5 text-sm text-soft">
           <span>
-            {filtered.length} of {products.length} products · {totals.units} units
+            {filtered.length} of {products.length} products
           </span>
-          <span>Stock value · {money(totals.value)}</span>
+          <span className="font-medium text-ink">Showing filtered stock list</span>
         </div>
       </section>
 
@@ -212,7 +281,7 @@ function StockPage() {
       <EditProductDialog product={editing} onClose={() => setEditing(null)} onSaved={invalidate} />
 
       <Dialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
-        <DialogContent className="glass rounded-3xl">
+        <DialogContent className="panel rounded-xl">
           <DialogHeader>
             <DialogTitle className="font-display">Delete product</DialogTitle>
             <DialogDescription>
@@ -272,7 +341,7 @@ function AddProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass rounded-3xl">
+      <DialogContent className="panel rounded-xl">
         <DialogHeader>
           <DialogTitle className="font-display">Add product</DialogTitle>
           <DialogDescription>New products start with zero on hand.</DialogDescription>
@@ -383,7 +452,7 @@ function EditProductDialog({
 
   return (
     <Dialog open={!!product} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="glass rounded-3xl">
+      <DialogContent className="panel rounded-xl">
         <DialogHeader>
           <DialogTitle className="font-display">Edit product</DialogTitle>
           <DialogDescription>Use “Add stock” to change quantity on hand.</DialogDescription>
@@ -490,7 +559,7 @@ function AddStockDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass rounded-3xl">
+      <DialogContent className="panel rounded-xl">
         <DialogHeader>
           <DialogTitle className="font-display">Add stock</DialogTitle>
           <DialogDescription>Adds to the quantity already on hand.</DialogDescription>

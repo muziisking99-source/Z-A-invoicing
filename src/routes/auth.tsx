@@ -8,12 +8,12 @@ import { useAuth } from "@/lib/useAuth";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in · Marrow Stock & Invoicing" },
+      { title: "Sign in · ZA Stock" },
       {
         name: "description",
-        content: "Sign in to Marrow to manage product stock and create customer invoices.",
+        content: "Sign in to ZA Stock to manage product stock and create customer invoices.",
       },
-      { property: "og:title", content: "Sign in · Marrow Stock & Invoicing" },
+      { property: "og:title", content: "Sign in · ZA Stock" },
       {
         property: "og:description",
         content: "Private internal tool for stock levels and invoicing.",
@@ -49,27 +49,27 @@ function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div className="min-h-[100dvh] bg-canvas text-ink">
       <GlowBackdrop />
-      <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-5">
-        <div className="glass animate-rise rounded-3xl p-6">
-          <div className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-primary/15 font-display text-sm font-bold text-accent-ink">
-              M
+      <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-8 sm:px-5">
+        <div className="panel animate-rise rounded-xl p-5 sm:p-7 md:p-8">
+          <div className="flex items-center gap-3">
+            <span className="grid size-11 place-items-center rounded-lg bg-primary font-display text-sm font-bold tracking-wide text-primary-foreground">
+              ZA
             </span>
-            <span className="font-display text-sm font-semibold tracking-tight">Marrow</span>
+            <div>
+              <p className="font-display text-lg font-semibold tracking-tight">ZA Stock</p>
+              <p className="text-sm text-soft">Stock & invoices</p>
+            </div>
           </div>
-          <p className="mt-5 font-mono text-[11px] uppercase tracking-[0.2em] text-soft">
+          <p className="mt-7 text-sm font-medium uppercase tracking-[0.12em] text-soft">
             Internal access
           </p>
-          <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight">Sign in</h1>
+          <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">Sign in</h1>
 
-          <form onSubmit={signIn} className="mt-5 space-y-3">
+          <form onSubmit={signIn} className="mt-6 space-y-4">
             <div>
-              <label
-                htmlFor="email"
-                className="font-mono text-[10px] uppercase tracking-[0.15em] text-soft"
-              >
+              <label htmlFor="email" className="text-sm font-medium text-soft">
                 Email
               </label>
               <input
@@ -78,14 +78,11 @@ function AuthPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-2xl border border-line bg-paper/70 px-3 py-2 text-sm outline-none focus:border-primary/50"
+                className="mt-1.5 w-full rounded-lg border border-line bg-paper px-4 py-3 text-base outline-none transition duration-150 focus:border-primary focus:ring-2 focus:ring-ring/25"
               />
             </div>
             <div>
-              <label
-                htmlFor="password"
-                className="font-mono text-[10px] uppercase tracking-[0.15em] text-soft"
-              >
+              <label htmlFor="password" className="text-sm font-medium text-soft">
                 Password
               </label>
               <input
@@ -94,18 +91,18 @@ function AuthPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-2xl border border-line bg-paper/70 px-3 py-2 text-sm outline-none focus:border-primary/50"
+                className="mt-1.5 w-full rounded-lg border border-line bg-paper px-4 py-3 text-base outline-none transition duration-150 focus:border-primary focus:ring-2 focus:ring-ring/25"
               />
             </div>
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-2xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-105 disabled:opacity-60"
+              className="btn-press w-full rounded-lg bg-primary py-3.5 text-base font-semibold text-primary-foreground disabled:opacity-60"
             >
               {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>
-          <p className="mt-4 font-mono text-[11px] leading-relaxed text-soft">
+          <p className="mt-5 text-sm leading-relaxed text-soft">
             Accounts are created by an administrator. There is no public sign-up.
           </p>
         </div>

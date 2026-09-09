@@ -4,17 +4,29 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/useAuth";
 
 const NAV = [
-  { to: "/", label: "Stock" },
-  { to: "/new-invoice", label: "New Invoice" },
-  { to: "/history", label: "History" },
+  { to: "/", label: "Stock", short: "Stock" },
+  { to: "/new-invoice", label: "New Invoice", short: "Invoice" },
+  { to: "/history", label: "History", short: "History" },
 ] as const;
 
 export function GlowBackdrop() {
+  return <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-canvas" />;
+}
+
+function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
-      <div className="absolute -left-20 top-[-6rem] h-72 w-72 rounded-full bg-glow-pink/40 blur-3xl" />
-      <div className="absolute right-[-4rem] top-1/3 h-80 w-80 rounded-full bg-glow-sky/40 blur-3xl" />
-      <div className="absolute bottom-[-5rem] left-1/3 h-72 w-72 rounded-full bg-glow-violet/40 blur-3xl" />
+    <div className={`flex items-center gap-2.5 ${compact ? "px-0" : "px-1 py-1"}`}>
+      <span className="grid size-9 place-items-center rounded-lg bg-primary font-display text-xs font-bold tracking-wide text-primary-foreground sm:size-11 sm:text-sm">
+        ZA
+      </span>
+      <div className="min-w-0">
+        <p className="font-display text-base font-semibold tracking-tight text-ink sm:text-lg">
+          ZA Stock
+        </p>
+        {!compact ? (
+          <p className="hidden text-sm text-soft sm:block">Stock & invoices</p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -29,58 +41,59 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (loading || !session) {
     return (
-      <div className="min-h-screen bg-canvas">
+      <div className="min-h-[100dvh] bg-canvas">
         <GlowBackdrop />
-        <div className="flex min-h-screen items-center justify-center font-mono text-xs uppercase tracking-[0.2em] text-soft">
-          Loading ledger…
+        <div className="flex min-h-[100dvh] items-center justify-center text-base text-soft">
+          Loading…
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-canvas text-ink selection:bg-primary/20">
+    <div className="min-h-[100dvh] bg-canvas text-ink selection:bg-primary/15">
       <GlowBackdrop />
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-5 px-4 py-5 lg:flex-row lg:px-6">
-        <aside className="shrink-0 lg:w-52">
-          <div className="glass rounded-3xl p-3 lg:sticky lg:top-5">
-            <div className="flex items-center gap-2 px-2 py-2">
-              <span className="grid size-8 place-items-center rounded-xl bg-primary/15 font-display text-sm font-bold text-accent-ink">
-                M
-              </span>
-              <span className="font-display text-sm font-semibold tracking-tight">Marrow</span>
+      <div className="mx-auto flex min-h-[100dvh] max-w-7xl flex-col gap-4 px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 sm:gap-6 sm:px-6 sm:py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-8">
+        <aside className="shrink-0 lg:w-60">
+          <div className="panel rounded-xl p-3 sm:p-4 lg:sticky lg:top-6">
+            <div className="flex items-center justify-between gap-3 lg:block">
+              <BrandMark compact />
+              <div className="min-w-0 text-right lg:mt-5 lg:border-t lg:border-line lg:pt-4 lg:text-left">
+                <p className="truncate text-xs text-soft sm:text-sm">{session.user.email}</p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    navigate({ to: "/auth" });
+                  }}
+                  className="btn-press mt-0.5 text-xs font-semibold text-accent-ink hover:underline sm:mt-2 sm:text-sm"
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
-            <nav className="mt-3 flex gap-1 lg:mt-3 lg:flex-col lg:space-y-1">
+            <nav className="mt-3 grid grid-cols-3 gap-1.5 sm:mt-4 lg:mt-5 lg:flex lg:flex-col lg:gap-1">
               {NAV.map((item) => (
                 <Link
                   key={item.to}
                   to={item.to}
                   activeOptions={{ exact: item.to === "/" }}
                   activeProps={{
-                    className: "bg-primary/15 font-semibold text-accent-ink",
+                    className: "bg-primary text-primary-foreground",
                   }}
-                  inactiveProps={{ className: "text-soft hover:bg-paper/70" }}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium transition lg:justify-start"
+                  inactiveProps={{
+                    className: "text-ink hover:bg-secondary",
+                  }}
+                  className="btn-press flex items-center justify-center rounded-lg px-2 py-2.5 text-center text-sm font-medium sm:px-3 sm:py-3 sm:text-base lg:justify-start lg:px-4"
                 >
-                  {item.label}
+                  <span className="lg:hidden">{item.short}</span>
+                  <span className="hidden lg:inline">{item.label}</span>
                 </Link>
               ))}
             </nav>
-            <div className="mt-4 rounded-2xl bg-paper/50 px-3 py-2">
-              <p className="truncate font-mono text-[11px] text-soft">{session.user.email}</p>
-              <button
-                onClick={async () => {
-                  await supabase.auth.signOut();
-                  navigate({ to: "/auth" });
-                }}
-                className="mt-1 font-mono text-[11px] font-medium text-accent-ink hover:underline"
-              >
-                Sign out
-              </button>
-            </div>
           </div>
         </aside>
-        <main className="min-w-0 flex-1 pb-10">{children}</main>
+        <main className="min-w-0 flex-1 animate-rise pb-8 sm:pb-12">{children}</main>
       </div>
     </div>
   );
@@ -96,12 +109,20 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:gap-4">
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-soft">{eyebrow}</p>
-        <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight">{title}</h1>
+        <p className="text-xs font-medium uppercase tracking-[0.12em] text-soft sm:text-sm">
+          {eyebrow}
+        </p>
+        <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl md:text-4xl">
+          {title}
+        </h1>
       </div>
-      {children ? <div className="flex items-center gap-2">{children}</div> : null}
+      {children ? (
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
