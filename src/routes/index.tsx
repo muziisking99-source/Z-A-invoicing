@@ -281,7 +281,10 @@ function AddProductDialog({
           className="space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!name.trim()) return toast.error("Product name is required");
+            if (!name.trim()) {
+              toast.error("Product name is required");
+              return;
+            }
             save.mutate();
           }}
         >
@@ -389,7 +392,10 @@ function EditProductDialog({
           className="space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!name.trim()) return toast.error("Product name is required");
+            if (!name.trim()) {
+              toast.error("Product name is required");
+              return;
+            }
             save.mutate();
           }}
         >
