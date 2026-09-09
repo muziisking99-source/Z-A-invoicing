@@ -7,6 +7,14 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Env / secrets (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel
+
 node_modules
 dist
 dist-ssr
