@@ -373,9 +373,11 @@ function NewInvoicePage() {
                                   active ? "text-primary-foreground/90" : "text-soft",
                                 )}
                               >
-                                {mode === "case" && row.product
-                                  ? `${row.product.units_per_case} units each`
-                                  : "Loose units"}
+                                {mode === "unit"
+                                  ? "Single items"
+                                  : row.product
+                                    ? `${row.product.units_per_case} units each`
+                                    : "Full cases"}
                               </span>
                             </button>
                           );

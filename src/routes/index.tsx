@@ -682,7 +682,7 @@ function AddStockDialog({
         <DialogHeader>
           <DialogTitle className="font-display">Add stock</DialogTitle>
           <DialogDescription>
-            Search a product, then add loose units or whole cases.
+            Search a product, then add units or whole cases.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -727,10 +727,10 @@ function AddStockDialog({
                     )}
                   >
                     {mode === "unit"
-                      ? "Loose items"
+                      ? "Single items"
                       : product
                         ? `${product.units_per_case} units each`
-                        : "Whole cases"}
+                        : "Full cases"}
                   </span>
                 </button>
               ))}
