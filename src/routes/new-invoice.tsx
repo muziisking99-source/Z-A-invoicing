@@ -6,7 +6,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { money } from "@/lib/format";
 import { downloadInvoicePdf, type InvoicePdfData } from "@/lib/invoice-pdf";
-import { stockKindLabel, useProducts, type Product } from "@/lib/products";
+import {
+  qtyBasisLabel,
+  unitsForLine,
+  useProducts,
+  type PriceBasis,
+  type Product,
+  type QtyBasis,
+} from "@/lib/products";
 import { ProductPicker } from "@/components/ProductPicker";
 import { cn } from "@/lib/utils";
 import {
@@ -39,14 +46,12 @@ export const Route = createFileRoute("/new-invoice")({
   component: NewInvoicePage,
 });
 
-type PriceMode = "catalog" | "manual";
-
 type Line = {
   key: string;
   productId: string;
   quantity: string;
-  priceMode: PriceMode;
-  /** Used when priceMode is manual. */
+  qtyBasis: QtyBasis;
+  priceBasis: PriceBasis;
   manualPrice: string;
 };
 
@@ -54,7 +59,8 @@ const newLine = (): Line => ({
   key: Math.random().toString(36).slice(2),
   productId: "",
   quantity: "1",
-  priceMode: "catalog",
+  qtyBasis: "unit",
+  priceBasis: "unit",
   manualPrice: "",
 });
 
@@ -82,37 +88,52 @@ function NewInvoicePage() {
     const demand = new Map<string, number>();
     for (const line of lines) {
       if (!line.productId) continue;
+      const product = byId.get(line.productId);
+      if (!product) continue;
       const qty = Number(line.quantity);
       const quantity = Number.isFinite(qty) ? Math.floor(qty) : 0;
-      if (quantity <= 0) continue;
-      demand.set(line.productId, (demand.get(line.productId) ?? 0) + quantity);
+      const units = unitsForLine(quantity, line.qtyBasis, product.units_per_case);
+      if (units <= 0) continue;
+      demand.set(line.productId, (demand.get(line.productId) ?? 0) + units);
     }
     return demand;
-  }, [lines]);
+  }, [lines, byId]);
 
   const resolved = lines.map((line) => {
     const product = byId.get(line.productId) as Product | undefined;
     const qty = Number(line.quantity);
     const quantity = Number.isFinite(qty) ? Math.floor(qty) : 0;
-    const catalogPrice = product?.selling_price ?? 0;
+    const canUseCase = !!product && product.case_price > 0;
+    const priceBasis: PriceBasis =
+      line.priceBasis === "case" && !canUseCase
+        ? "unit"
+        : line.priceBasis === "manual"
+          ? "manual"
+          : line.priceBasis === "case"
+            ? "case"
+            : "unit";
     const parsedManual = Number(line.manualPrice);
-    const usingManual = line.priceMode === "manual";
-    const charge = usingManual
-      ? Number.isFinite(parsedManual) && parsedManual >= 0
-        ? parsedManual
-        : 0
-      : catalogPrice;
-    const priceBasis = product?.stock_kind ?? "unit";
+    const charge =
+      priceBasis === "manual"
+        ? Number.isFinite(parsedManual) && parsedManual >= 0
+          ? parsedManual
+          : 0
+        : priceBasis === "case"
+          ? (product?.case_price ?? 0)
+          : (product?.selling_price ?? 0);
+    const unitsMoved = product
+      ? unitsForLine(quantity, line.qtyBasis, product.units_per_case)
+      : 0;
     const demanded = product ? (demandByProduct.get(product.id) ?? 0) : 0;
     const shortfall = !!product && demanded > product.quantity_on_hand;
     return {
       line,
       product,
       quantity,
-      charge,
-      catalogPrice,
-      usingManual,
       priceBasis,
+      canUseCase,
+      charge,
+      unitsMoved,
       amount: quantity * charge,
       shortfall,
       demanded,
@@ -129,18 +150,20 @@ function NewInvoicePage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (deliveryCost < 0) {
-        throw new Error("Delivery cost cannot be negative");
-      }
-      const badPrice = filledLines.find(
-        (row) => row.usingManual && (!Number.isFinite(row.charge) || row.charge < 0),
+      if (deliveryCost < 0) throw new Error("Delivery cost cannot be negative");
+      const caseWithoutPrice = filledLines.find(
+        (row) => row.priceBasis === "case" && row.product!.case_price <= 0,
       );
-      if (badPrice) {
-        throw new Error(`Enter a valid price for ${badPrice.product!.name}`);
+      if (caseWithoutPrice) {
+        throw new Error(`Case price is not set for ${caseWithoutPrice.product!.name}`);
       }
-      if (filledLines.some((row) => row.usingManual && row.line.manualPrice.trim() === "")) {
-        throw new Error("Enter a manual price for each line that uses Manual");
+      const needsManual = filledLines.find(
+        (row) => row.priceBasis === "manual" && row.line.manualPrice.trim() === "",
+      );
+      if (needsManual) {
+        throw new Error(`Enter a manual price for ${needsManual.product!.name}`);
       }
+
       const snapshot = {
         customer_name: customer.trim(),
         total,
@@ -148,18 +171,24 @@ function NewInvoicePage() {
         items: filledLines.map((row) => ({
           product_name: row.product!.name,
           quantity: row.quantity,
-          unit_price: row.priceBasis === "unit" ? row.charge : row.product!.selling_price,
-          case_price: row.priceBasis === "case" ? row.charge : 0,
+          unit_price:
+            row.priceBasis === "manual" ? row.charge : row.product!.selling_price,
+          case_price: row.product!.case_price,
           price_basis: row.priceBasis,
+          qty_basis: row.line.qtyBasis,
+          units_per_case: row.product!.units_per_case,
           line_total: row.amount,
         })),
       };
+
       const { data, error } = await supabase.rpc("create_invoice", {
         p_customer_name: snapshot.customer_name,
         p_items: filledLines.map((row) => ({
           product_id: row.product!.id,
           quantity: row.quantity,
-          unit_price: row.charge,
+          qty_basis: row.line.qtyBasis,
+          price_basis: row.priceBasis,
+          ...(row.priceBasis === "manual" ? { unit_price: row.charge } : {}),
         })),
         p_delivery_cost: deliveryCost,
       });
@@ -202,7 +231,7 @@ function NewInvoicePage() {
       return;
     }
     const needsManual = filledLines.find(
-      (row) => row.usingManual && row.line.manualPrice.trim() === "",
+      (row) => row.priceBasis === "manual" && row.line.manualPrice.trim() === "",
     );
     if (needsManual) {
       toast.error(`Enter a manual price for ${needsManual.product!.name}`);
@@ -293,67 +322,41 @@ function NewInvoicePage() {
                       <ProductPicker
                         products={products}
                         value={row.line.productId}
-                        onChange={(productId) => {
+                        onChange={(productId) =>
                           setLines((prev) =>
                             prev.map((l) =>
                               l.key === row.line.key
                                 ? {
                                     ...l,
                                     productId,
-                                    priceMode: "catalog",
+                                    qtyBasis: "unit",
+                                    priceBasis: "unit",
                                     manualPrice: "",
                                   }
                                 : l,
                             ),
-                          );
-                        }}
+                          )
+                        }
                       />
                     </div>
 
                     <div>
-                      <p className="mb-1.5 text-sm font-medium text-soft">Price</p>
+                      <p className="mb-1.5 text-sm font-medium text-soft">Quantity as</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {(["unit", "case"] as const).map((slot) => {
-                          const isCatalogSlot =
-                            !!row.product && row.product.stock_kind === slot;
-                          const isManualSlot = !!row.product && !isCatalogSlot;
-                          const catalogActive =
-                            isCatalogSlot && row.line.priceMode === "catalog";
-                          const manualActive =
-                            isManualSlot && row.line.priceMode === "manual";
-                          const active = catalogActive || manualActive;
-
+                        {(["unit", "case"] as const).map((mode) => {
+                          const active = row.line.qtyBasis === mode;
                           return (
                             <button
-                              key={slot}
+                              key={mode}
                               type="button"
                               disabled={!row.product}
-                              onClick={() => {
-                                if (!row.product) return;
-                                if (isCatalogSlot) {
-                                  setLines((prev) =>
-                                    prev.map((l) =>
-                                      l.key === row.line.key
-                                        ? { ...l, priceMode: "catalog" }
-                                        : l,
-                                    ),
-                                  );
-                                  return;
-                                }
+                              onClick={() =>
                                 setLines((prev) =>
                                   prev.map((l) =>
-                                    l.key === row.line.key
-                                      ? {
-                                          ...l,
-                                          priceMode: "manual",
-                                          manualPrice:
-                                            l.manualPrice ||
-                                            String(row.product!.selling_price),
-                                        }
-                                      : l,
+                                    l.key === row.line.key ? { ...l, qtyBasis: mode } : l,
                                   ),
-                                );
-                              }}
+                                )
+                              }
                               className={cn(
                                 "btn-press rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
                                 active
@@ -362,33 +365,114 @@ function NewInvoicePage() {
                               )}
                             >
                               <span className="block">
-                                {isManualSlot
-                                  ? "Manual"
-                                  : stockKindLabel(slot)}
+                                {mode === "unit" ? "Units" : "Cases"}
                               </span>
                               <span
                                 className={cn(
-                                  "font-mono text-xs tabular-nums",
-                                  active
-                                    ? "text-primary-foreground/90"
-                                    : "text-soft",
+                                  "text-xs",
+                                  active ? "text-primary-foreground/90" : "text-soft",
                                 )}
                               >
-                                {!row.product
-                                  ? "—"
-                                  : isCatalogSlot
-                                    ? money(row.catalogPrice)
-                                    : row.line.priceMode === "manual" &&
-                                        row.line.manualPrice
-                                      ? money(row.charge)
-                                      : "Enter price"}
+                                {mode === "case" && row.product
+                                  ? `${row.product.units_per_case} units each`
+                                  : "Loose units"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {row.product && row.unitsMoved > 0 ? (
+                        <p className="mt-1.5 text-sm text-soft">
+                          Deducts {row.unitsMoved.toLocaleString("en-ZA")} unit
+                          {row.unitsMoved === 1 ? "" : "s"} from stock
+                          {row.line.qtyBasis === "case"
+                            ? ` (${row.quantity} × ${row.product.units_per_case})`
+                            : ""}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <p className="mb-1.5 text-sm font-medium text-soft">Price</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(
+                          [
+                            {
+                              basis: "unit" as const,
+                              label: "Unit",
+                              sub: row.product ? money(row.product.selling_price) : "—",
+                              disabled: !row.product,
+                            },
+                            {
+                              basis: "case" as const,
+                              label: "Case",
+                              sub:
+                                row.product && row.canUseCase
+                                  ? money(row.product.case_price)
+                                  : "—",
+                              disabled: !row.product || !row.canUseCase,
+                            },
+                            {
+                              basis: "manual" as const,
+                              label: "Manual",
+                              sub:
+                                row.priceBasis === "manual" && row.line.manualPrice
+                                  ? money(row.charge)
+                                  : "Enter",
+                              disabled: !row.product,
+                            },
+                          ] as const
+                        ).map((opt) => {
+                          const active = row.priceBasis === opt.basis;
+                          return (
+                            <button
+                              key={opt.basis}
+                              type="button"
+                              disabled={opt.disabled}
+                              title={
+                                opt.basis === "case" && row.product && !row.canUseCase
+                                  ? "Set a case price on this product first"
+                                  : undefined
+                              }
+                              onClick={() =>
+                                setLines((prev) =>
+                                  prev.map((l) =>
+                                    l.key === row.line.key
+                                      ? {
+                                          ...l,
+                                          priceBasis: opt.basis,
+                                          manualPrice:
+                                            opt.basis === "manual"
+                                              ? l.manualPrice ||
+                                                String(row.product?.selling_price ?? "")
+                                              : l.manualPrice,
+                                        }
+                                      : l,
+                                  ),
+                                )
+                              }
+                              className={cn(
+                                "btn-press rounded-lg border px-2.5 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                                active
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-line bg-paper text-ink hover:bg-secondary",
+                              )}
+                            >
+                              <span className="block">{opt.label}</span>
+                              <span
+                                className={cn(
+                                  "font-mono text-xs tabular-nums",
+                                  active ? "text-primary-foreground/90" : "text-soft",
+                                )}
+                              >
+                                {opt.sub}
                               </span>
                             </button>
                           );
                         })}
                       </div>
 
-                      {row.product && row.line.priceMode === "manual" ? (
+                      {row.product && row.priceBasis === "manual" ? (
                         <div className="mt-2">
                           <label
                             className="mb-1.5 block text-sm font-medium text-soft"
@@ -413,7 +497,7 @@ function NewInvoicePage() {
                                 ),
                               )
                             }
-                            className="h-12 w-full rounded-lg border border-line bg-paper px-3 text-right text-base font-medium tabular-nums outline-none transition-colors duration-150 focus:border-primary focus:ring-2 focus:ring-ring/25 sm:h-[50px]"
+                            className="h-12 w-full rounded-lg border border-line bg-paper px-3 text-right text-base font-medium tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-ring/25 sm:h-[50px]"
                           />
                         </div>
                       ) : null}
@@ -425,11 +509,10 @@ function NewInvoicePage() {
                           className="mb-1.5 block text-sm font-medium text-soft"
                           htmlFor={`qty-${row.line.key}`}
                         >
-                          Qty (units)
+                          Qty ({qtyBasisLabel(row.line.qtyBasis).toLowerCase()}s)
                         </label>
                         <input
                           id={`qty-${row.line.key}`}
-                          aria-label="Quantity in units"
                           type="number"
                           min="1"
                           step="1"
@@ -444,10 +527,9 @@ function NewInvoicePage() {
                               ),
                             )
                           }
-                          className="h-12 w-full rounded-lg border border-line bg-paper px-3 text-right text-base font-medium tabular-nums outline-none transition-colors duration-150 focus:border-primary focus:ring-2 focus:ring-ring/25 sm:h-[50px]"
+                          className="h-12 w-full rounded-lg border border-line bg-paper px-3 text-right text-base font-medium tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-ring/25 sm:h-[50px]"
                         />
                       </div>
-
                       <div className="min-w-0">
                         <p className="mb-1.5 text-sm font-medium text-soft">Line total</p>
                         <div className="flex h-12 items-center justify-end rounded-lg border border-line bg-secondary/70 px-3 text-base font-semibold tabular-nums text-accent-ink sm:h-[50px]">
@@ -460,7 +542,9 @@ function NewInvoicePage() {
                   {row.shortfall ? (
                     <p className="mt-3 text-sm font-medium text-destructive">
                       Only {row.product!.quantity_on_hand} of {row.product!.name} available
-                      {row.demanded > row.quantity ? ` (lines total ${row.demanded})` : ""}
+                      {row.demanded > row.unitsMoved
+                        ? ` (lines need ${row.demanded} units)`
+                        : ""}
                     </p>
                   ) : null}
                 </div>

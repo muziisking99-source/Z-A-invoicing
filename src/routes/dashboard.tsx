@@ -54,7 +54,7 @@ function useSalesData() {
         supabase
           .from("invoice_items")
           .select(
-            "id, invoice_id, product_id, product_name, quantity, unit_price, line_total, created_at",
+            "id, invoice_id, product_id, product_name, quantity, unit_price, line_total, created_at, qty_basis, units_per_case",
           ),
       ]);
       if (invoicesRes.error) throw invoicesRes.error;
@@ -74,6 +74,8 @@ function useSalesData() {
         unit_price: Number(row.unit_price),
         line_total: Number(row.line_total),
         created_at: row.created_at,
+        qty_basis: row.qty_basis === "case" ? "case" : "unit",
+        units_per_case: Math.max(1, Number(row.units_per_case ?? 1) || 1),
       }));
       return { invoices, items };
     },

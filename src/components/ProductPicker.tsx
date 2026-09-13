@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { money } from "@/lib/format";
-import { stockKindLabel, type Product } from "@/lib/products";
+import type { Product } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
 type ProductPickerProps = {
@@ -102,7 +102,7 @@ export function ProductPicker({
       tokens.length === 0
         ? [...products]
         : products.filter((p) => {
-            const haystack = `${p.name} ${stockKindLabel(p.stock_kind)}`.toLowerCase();
+            const haystack = p.name.toLowerCase();
             return tokens.every((t) => haystack.includes(t));
           });
 
@@ -255,12 +255,15 @@ export function ProductPicker({
               <span className="flex flex-col gap-1">
                 <span className="truncate font-medium text-ink">{selected.name}</span>
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-semibold text-ink">
-                    {stockKindLabel(selected.stock_kind)}
-                  </span>
                   <span className="font-mono text-sm font-semibold tabular-nums text-accent-ink">
-                    {money(selected.selling_price)}
+                    Unit {money(selected.selling_price)}
                   </span>
+                  {selected.case_price > 0 ? (
+                    <span className="font-mono text-sm tabular-nums text-soft">
+                      Case {money(selected.case_price)}
+                    </span>
+                  ) : null}
+                  <span className="text-sm text-soft">{selected.units_per_case}/case</span>
                   <span
                     className={cn(
                       "text-sm",
@@ -398,23 +401,22 @@ export function ProductPicker({
                         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                           <span
                             className={cn(
-                              "rounded-md px-1.5 py-0.5 text-xs font-semibold",
-                              isActive && !isSelected
-                                ? "bg-paper text-ink"
-                                : "bg-secondary text-ink",
-                              isSelected && "bg-paper/80 text-accent-ink",
-                            )}
-                          >
-                            {stockKindLabel(product.stock_kind)}
-                          </span>
-                          <span
-                            className={cn(
                               "font-mono text-sm font-semibold tabular-nums",
                               isSelected ? "text-accent-ink" : "text-accent-ink",
                             )}
                           >
-                            {money(product.selling_price)}
+                            Unit {money(product.selling_price)}
                           </span>
+                          {product.case_price > 0 ? (
+                            <span
+                              className={cn(
+                                "font-mono text-sm tabular-nums",
+                                isSelected ? "text-accent-ink/80" : "text-soft",
+                              )}
+                            >
+                              Case {money(product.case_price)}
+                            </span>
+                          ) : null}
                           {outOfStock ? (
                             <span className="text-sm font-medium text-destructive">
                               Out of stock
@@ -426,7 +428,7 @@ export function ProductPicker({
                                 isSelected ? "text-accent-ink/80" : "text-soft",
                               )}
                             >
-                              {product.quantity_on_hand} on hand
+                              {product.quantity_on_hand} on hand · {product.units_per_case}/case
                             </span>
                           )}
                         </span>

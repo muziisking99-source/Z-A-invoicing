@@ -24,8 +24,10 @@ export type Database = {
           price_basis: string
           product_id: string | null
           product_name: string
+          qty_basis: string
           quantity: number
           unit_price: number
+          units_per_case: number
         }
         Insert: {
           case_price?: number
@@ -36,8 +38,10 @@ export type Database = {
           price_basis?: string
           product_id?: string | null
           product_name: string
+          qty_basis?: string
           quantity: number
           unit_price: number
+          units_per_case?: number
         }
         Update: {
           case_price?: number
@@ -48,8 +52,10 @@ export type Database = {
           price_basis?: string
           product_id?: string | null
           product_name?: string
+          qty_basis?: string
           quantity?: number
           unit_price?: number
+          units_per_case?: number
         }
         Relationships: [
           {
@@ -105,6 +111,7 @@ export type Database = {
           quantity_on_hand: number
           selling_price: number
           stock_kind: string
+          units_per_case: number
         }
         Insert: {
           case_price?: number
@@ -115,6 +122,7 @@ export type Database = {
           quantity_on_hand?: number
           selling_price?: number
           stock_kind?: string
+          units_per_case?: number
         }
         Update: {
           case_price?: number
@@ -125,6 +133,7 @@ export type Database = {
           quantity_on_hand?: number
           selling_price?: number
           stock_kind?: string
+          units_per_case?: number
         }
         Relationships: []
       }

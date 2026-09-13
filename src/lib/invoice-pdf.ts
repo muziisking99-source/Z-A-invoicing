@@ -1,5 +1,11 @@
 import { money, shortDate } from "@/lib/format";
-import { chargedLinePrice, stockKindLabel, type PriceBasis } from "@/lib/products";
+import {
+  chargedLinePrice,
+  priceBasisLabel,
+  qtyBasisLabel,
+  type PriceBasis,
+  type QtyBasis,
+} from "@/lib/products";
 
 export type InvoicePdfItem = {
   product_name: string;
@@ -7,6 +13,8 @@ export type InvoicePdfItem = {
   unit_price: number;
   case_price: number;
   price_basis: PriceBasis;
+  qty_basis?: QtyBasis;
+  units_per_case?: number;
   line_total: number;
 };
 
@@ -55,19 +63,16 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   const contentW = right - left;
   const logoData = await loadLogoDataUrl();
 
-  // Top accent bar
   doc.setFillColor(...ROSE);
   doc.rect(0, 0, pageW, 8, "F");
 
   let y = 36;
 
-  // Company brand (left) — large logo so mark text stays readable
   const logoSize = 96;
   if (logoData) {
     doc.addImage(logoData, "JPEG", left, y, logoSize, logoSize);
   }
 
-  // Title block (right)
   const titleY = y + 22;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(28);
@@ -85,7 +90,6 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
   y = logoData ? y + logoSize + 24 : 100;
 
-  // BILL TO
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...ROSE_DEEP);
@@ -101,7 +105,6 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
   y += 20;
 
-  // Table columns — Description | Qty | Price | Total
   const padX = 10;
   const colDesc = left + padX;
   const colQty = left + contentW * 0.55;
@@ -124,13 +127,17 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
   y += rowH;
 
-  // Line items
   doc.setFontSize(9);
   let alt = false;
 
   for (const item of invoice.items) {
-    const kindNote = ` (${stockKindLabel(item.price_basis).toLowerCase()})`;
-    const nameLines = doc.splitTextToSize(`${item.product_name}${kindNote}`, descMaxW);
+    const qtyBasis = item.qty_basis === "case" ? "case" : "unit";
+    const pack = Math.max(1, item.units_per_case ?? 1);
+    const unitsMoved = qtyBasis === "case" ? item.quantity * pack : item.quantity;
+    const note = ` (${qtyBasisLabel(qtyBasis).toLowerCase()} · ${priceBasisLabel(item.price_basis).toLowerCase()} price${
+      qtyBasis === "case" ? ` · ${unitsMoved} units` : ""
+    })`;
+    const nameLines = doc.splitTextToSize(`${item.product_name}${note}`, descMaxW);
     const blockH = Math.max(rowH, nameLines.length * 12 + 14);
     const price = chargedLinePrice(item);
 

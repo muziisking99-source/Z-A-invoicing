@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { money } from "@/lib/format";
-import { stockKindLabel, useProducts, type Product, type StockKind } from "@/lib/products";
+import { useProducts, type Product, type QtyBasis } from "@/lib/products";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -48,7 +48,6 @@ const ghostBtn =
 function StockPage() {
   const queryClient = useQueryClient();
   const { data: products = [], isLoading } = useProducts();
-  const [section, setSection] = useState<StockKind>("unit");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [stockOpen, setStockOpen] = useState(false);
@@ -57,30 +56,18 @@ function StockPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["products"] });
 
-  const sectionProducts = useMemo(
-    () => products.filter((p) => p.stock_kind === section),
-    [products, section],
-  );
-
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return term
-      ? sectionProducts.filter((p) => p.name.toLowerCase().includes(term))
-      : sectionProducts;
-  }, [sectionProducts, search]);
+    return term ? products.filter((p) => p.name.toLowerCase().includes(term)) : products;
+  }, [products, search]);
 
   const totals = useMemo(
     () => ({
-      units: sectionProducts.reduce((sum, p) => sum + p.quantity_on_hand, 0),
-      value: sectionProducts.reduce(
-        (sum, p) => sum + p.quantity_on_hand * p.selling_price,
-        0,
-      ),
+      units: products.reduce((sum, p) => sum + p.quantity_on_hand, 0),
+      value: products.reduce((sum, p) => sum + p.quantity_on_hand * p.cost_price, 0),
     }),
-    [sectionProducts],
+    [products],
   );
-
-  const sellLabel = section === "case" ? "Case price" : "Unit price";
 
   const removeProduct = useMutation({
     mutationFn: async (id: string) => {
@@ -117,62 +104,6 @@ function StockPage() {
         </div>
       </PageHeader>
 
-      <div className="mt-3" role="tablist" aria-label="Stock section">
-        <p className="mb-2 text-sm font-medium text-soft">Choose stock type</p>
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-          {(["unit", "case"] as const).map((kind) => {
-            const count = products.filter((p) => p.stock_kind === kind).length;
-            const active = section === kind;
-            return (
-              <button
-                key={kind}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setSection(kind)}
-                className={cn(
-                  "btn-press rounded-xl border-2 px-3.5 py-3.5 text-left transition-colors duration-150 sm:px-5 sm:py-4",
-                  active
-                    ? "border-primary bg-accent text-ink shadow-[0_0_0_1px_var(--color-primary)]"
-                    : "border-line bg-paper text-soft hover:border-primary/40 hover:bg-secondary/60 hover:text-ink",
-                )}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span
-                    className={cn(
-                      "font-display text-base font-bold tracking-tight sm:text-lg",
-                      active ? "text-accent-ink" : "text-ink",
-                    )}
-                  >
-                    {stockKindLabel(kind)} stock
-                  </span>
-                  <span
-                    className={cn(
-                      "rounded-md px-2 py-0.5 font-mono text-xs font-semibold tabular-nums sm:text-sm",
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-soft",
-                    )}
-                  >
-                    {count}
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    "mt-1.5 block text-xs leading-snug sm:text-sm",
-                    active ? "text-ink/75" : "text-soft",
-                  )}
-                >
-                  {kind === "unit"
-                    ? "Sold and priced per single unit"
-                    : "Sold and priced as a full case"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="panel mt-3 grid grid-cols-2 divide-x divide-line overflow-hidden rounded-xl">
         <div className="px-3 py-3 sm:px-5 sm:py-4">
           <p className="text-xs font-medium text-soft sm:text-sm">Units on hand</p>
@@ -181,14 +112,13 @@ function StockPage() {
           </p>
         </div>
         <div className="px-3 py-3 sm:px-5 sm:py-4">
-          <p className="text-xs font-medium text-soft sm:text-sm">Stock value</p>
+          <p className="text-xs font-medium text-soft sm:text-sm">Stock value (cost)</p>
           <p className="tabular mt-1 break-all font-mono text-xl font-semibold tracking-tight text-accent-ink sm:text-2xl">
             {isLoading ? "—" : money(totals.value)}
           </p>
         </div>
       </div>
 
-      {/* Mobile cards */}
       <section className="mt-3 space-y-2.5 md:hidden">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
@@ -199,8 +129,8 @@ function StockPage() {
           ))
         ) : filtered.length === 0 ? (
           <div className="panel rounded-xl px-4 py-10 text-center text-soft">
-            {sectionProducts.length === 0
-              ? `No ${stockKindLabel(section).toLowerCase()} products yet — add your first one.`
+            {products.length === 0
+              ? "No products yet — add your first one."
               : "No products match that search."}
           </div>
         ) : (
@@ -222,13 +152,23 @@ function StockPage() {
                   <dd className="font-medium tabular-nums">{money(product.cost_price)}</dd>
                 </div>
                 <div>
-                  <dt className="text-soft">{sellLabel}</dt>
+                  <dt className="text-soft">Pack</dt>
+                  <dd className="font-medium tabular-nums">{product.units_per_case} / case</dd>
+                </div>
+                <div>
+                  <dt className="text-soft">Unit price</dt>
                   <dd className="font-medium tabular-nums">{money(product.selling_price)}</dd>
                 </div>
+                <div>
+                  <dt className="text-soft">Case price</dt>
+                  <dd className="font-medium tabular-nums">
+                    {product.case_price > 0 ? money(product.case_price) : "—"}
+                  </dd>
+                </div>
                 <div className="col-span-2">
-                  <dt className="text-soft">Value</dt>
+                  <dt className="text-soft">Value (cost)</dt>
                   <dd className="font-semibold tabular-nums text-accent-ink">
-                    {money(product.quantity_on_hand * product.selling_price)}
+                    {money(product.quantity_on_hand * product.cost_price)}
                   </dd>
                 </div>
               </dl>
@@ -252,20 +192,20 @@ function StockPage() {
           ))
         )}
         <p className="px-1 text-sm text-soft">
-          {filtered.length} of {sectionProducts.length} {stockKindLabel(section).toLowerCase()}{" "}
-          products
+          {filtered.length} of {products.length} products
         </p>
       </section>
 
-      {/* Desktop table */}
       <section className="panel mt-3 hidden overflow-hidden rounded-xl md:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-base">
+          <table className="w-full min-w-[900px] border-collapse text-base">
             <thead>
               <tr className="sticky top-0 z-[1] border-b border-line bg-secondary text-left text-sm font-semibold uppercase tracking-wide text-soft">
                 <th className="px-5 py-3.5">Name</th>
                 <th className="px-5 py-3.5 text-right">Cost</th>
-                <th className="px-5 py-3.5 text-right">{sellLabel}</th>
+                <th className="px-5 py-3.5 text-right">Unit</th>
+                <th className="px-5 py-3.5 text-right">Case</th>
+                <th className="px-5 py-3.5 text-right">Pack</th>
                 <th className="px-5 py-3.5 text-right">On hand</th>
                 <th className="px-5 py-3.5 text-right">Value</th>
                 <th className="px-5 py-3.5" />
@@ -275,16 +215,16 @@ function StockPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-line/80 last:border-0">
-                    <td className="px-5 py-4" colSpan={6}>
+                    <td className="px-5 py-4" colSpan={8}>
                       <div className="skeleton-bar h-5 w-full max-w-xl" />
                     </td>
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-14 text-center text-soft">
-                    {sectionProducts.length === 0
-                      ? `No ${stockKindLabel(section).toLowerCase()} products yet — add your first one.`
+                  <td colSpan={8} className="px-5 py-14 text-center text-soft">
+                    {products.length === 0
+                      ? "No products yet — add your first one."
                       : "No products match that search."}
                   </td>
                 </tr>
@@ -302,6 +242,12 @@ function StockPage() {
                     <td className="px-5 py-4 text-right font-mono text-[15px]">
                       {money(product.selling_price)}
                     </td>
+                    <td className="px-5 py-4 text-right font-mono text-[15px]">
+                      {product.case_price > 0 ? money(product.case_price) : "—"}
+                    </td>
+                    <td className="px-5 py-4 text-right font-mono text-[15px]">
+                      {product.units_per_case}
+                    </td>
                     <td
                       className={`px-5 py-4 text-right font-mono text-[15px] font-semibold ${
                         product.quantity_on_hand === 0 ? "text-destructive" : ""
@@ -310,7 +256,7 @@ function StockPage() {
                       {product.quantity_on_hand}
                     </td>
                     <td className="px-5 py-4 text-right font-mono text-[15px] font-semibold text-ink">
-                      {money(product.quantity_on_hand * product.selling_price)}
+                      {money(product.quantity_on_hand * product.cost_price)}
                     </td>
                     <td className="px-5 py-4 text-right whitespace-nowrap">
                       <button
@@ -336,24 +282,17 @@ function StockPage() {
         </div>
         <div className="tabular flex flex-wrap items-center justify-between gap-2 border-t border-line bg-secondary/60 px-5 py-3.5 text-sm text-soft">
           <span>
-            {filtered.length} of {sectionProducts.length} {stockKindLabel(section).toLowerCase()}{" "}
-            products
+            {filtered.length} of {products.length} products
           </span>
-          <span className="font-medium text-ink">{stockKindLabel(section)} stock</span>
+          <span className="font-medium text-ink">Value at cost</span>
         </div>
       </section>
 
-      <AddProductDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        stockKind={section}
-        onSaved={invalidate}
-      />
+      <AddProductDialog open={addOpen} onOpenChange={setAddOpen} onSaved={invalidate} />
       <AddStockDialog
         open={stockOpen}
         onOpenChange={setStockOpen}
-        products={sectionProducts}
-        stockKind={section}
+        products={products}
         onSaved={invalidate}
       />
       <EditProductDialog product={editing} onClose={() => setEditing(null)} onSaved={invalidate} />
@@ -387,35 +326,40 @@ function StockPage() {
 function AddProductDialog({
   open,
   onOpenChange,
-  stockKind,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  stockKind: StockKind;
   onSaved: () => void;
 }) {
   const [name, setName] = useState("");
   const [cost, setCost] = useState("");
   const [sell, setSell] = useState("");
-  const sellLabel = stockKind === "case" ? "Case price" : "Unit price";
+  const [casePrice, setCasePrice] = useState("");
+  const [pack, setPack] = useState("1");
 
   const save = useMutation({
     mutationFn: async () => {
+      const unitsPerCase = Number(pack);
+      if (!Number.isInteger(unitsPerCase) || unitsPerCase < 1) {
+        throw new Error("Units per case must be a whole number of at least 1");
+      }
       const { error } = await supabase.from("products").insert({
         name: name.trim(),
         cost_price: Number(cost || 0),
         selling_price: Number(sell || 0),
-        case_price: 0,
-        stock_kind: stockKind,
+        case_price: Number(casePrice || 0),
+        units_per_case: unitsPerCase,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(`${stockKindLabel(stockKind)} product added`);
+      toast.success("Product added");
       setName("");
       setCost("");
       setSell("");
+      setCasePrice("");
+      setPack("1");
       onOpenChange(false);
       onSaved();
     },
@@ -426,9 +370,7 @@ function AddProductDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="panel rounded-xl">
         <DialogHeader>
-          <DialogTitle className="font-display">
-            Add {stockKindLabel(stockKind).toLowerCase()} product
-          </DialogTitle>
+          <DialogTitle className="font-display">Add product</DialogTitle>
           <DialogDescription>New products start with zero on hand.</DialogDescription>
         </DialogHeader>
         <form
@@ -469,8 +411,22 @@ function AddProductDialog({
               />
             </div>
             <div>
+              <label className={labelClass} htmlFor="p-pack">
+                Units per case
+              </label>
+              <input
+                id="p-pack"
+                type="number"
+                min="1"
+                step="1"
+                value={pack}
+                onChange={(e) => setPack(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
+            <div>
               <label className={labelClass} htmlFor="p-sell">
-                {sellLabel}
+                Unit price
               </label>
               <input
                 id="p-sell"
@@ -479,6 +435,20 @@ function AddProductDialog({
                 step="0.01"
                 value={sell}
                 onChange={(e) => setSell(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="p-case">
+                Case price
+              </label>
+              <input
+                id="p-case"
+                type="number"
+                min="0"
+                step="0.01"
+                value={casePrice}
+                onChange={(e) => setCasePrice(e.target.value)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -506,6 +476,8 @@ function EditProductDialog({
   const [name, setName] = useState("");
   const [cost, setCost] = useState("");
   const [sell, setSell] = useState("");
+  const [casePrice, setCasePrice] = useState("");
+  const [pack, setPack] = useState("1");
   const [loadedId, setLoadedId] = useState<string | null>(null);
 
   if (product && product.id !== loadedId) {
@@ -513,19 +485,24 @@ function EditProductDialog({
     setName(product.name);
     setCost(String(product.cost_price));
     setSell(String(product.selling_price));
+    setCasePrice(String(product.case_price ?? 0));
+    setPack(String(product.units_per_case ?? 1));
   }
-
-  const sellLabel =
-    product?.stock_kind === "case" ? "Case price" : "Unit price";
 
   const save = useMutation({
     mutationFn: async () => {
+      const unitsPerCase = Number(pack);
+      if (!Number.isInteger(unitsPerCase) || unitsPerCase < 1) {
+        throw new Error("Units per case must be a whole number of at least 1");
+      }
       const { error } = await supabase
         .from("products")
         .update({
           name: name.trim(),
           cost_price: Number(cost || 0),
           selling_price: Number(sell || 0),
+          case_price: Number(casePrice || 0),
+          units_per_case: unitsPerCase,
         })
         .eq("id", product!.id);
       if (error) throw error;
@@ -543,11 +520,7 @@ function EditProductDialog({
       <DialogContent className="panel rounded-xl">
         <DialogHeader>
           <DialogTitle className="font-display">Edit product</DialogTitle>
-          <DialogDescription>
-            {product
-              ? `${stockKindLabel(product.stock_kind)} stock · use “Add stock” to change quantity.`
-              : "Use “Add stock” to change quantity on hand."}
-          </DialogDescription>
+          <DialogDescription>Use “Add stock” to change quantity on hand.</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -587,8 +560,22 @@ function EditProductDialog({
               />
             </div>
             <div>
+              <label className={labelClass} htmlFor="e-pack">
+                Units per case
+              </label>
+              <input
+                id="e-pack"
+                type="number"
+                min="1"
+                step="1"
+                value={pack}
+                onChange={(e) => setPack(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
+            <div>
               <label className={labelClass} htmlFor="e-sell">
-                {sellLabel}
+                Unit price
               </label>
               <input
                 id="e-sell"
@@ -597,6 +584,20 @@ function EditProductDialog({
                 step="0.01"
                 value={sell}
                 onChange={(e) => setSell(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="e-case">
+                Case price
+              </label>
+              <input
+                id="e-case"
+                type="number"
+                min="0"
+                step="0.01"
+                value={casePrice}
+                onChange={(e) => setCasePrice(e.target.value)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -616,35 +617,48 @@ function AddStockDialog({
   open,
   onOpenChange,
   products,
-  stockKind,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   products: Product[];
-  stockKind: StockKind;
   onSaved: () => void;
 }) {
   const [productId, setProductId] = useState("");
   const [qty, setQty] = useState("");
+  const [basis, setBasis] = useState<QtyBasis>("unit");
+
+  const product = products.find((p) => p.id === productId);
+  const amount = Number(qty);
+  const unitsToAdd =
+    product && Number.isInteger(amount) && amount > 0
+      ? basis === "case"
+        ? amount * product.units_per_case
+        : amount
+      : 0;
 
   const save = useMutation({
     mutationFn: async () => {
-      const product = products.find((p) => p.id === productId);
       if (!product) throw new Error("Select a product");
-      const amount = Number(qty);
-      if (!Number.isInteger(amount) || amount <= 0) throw new Error("Enter a whole quantity above 0");
+      if (!Number.isInteger(amount) || amount <= 0) {
+        throw new Error("Enter a whole quantity above 0");
+      }
+      if (basis === "case" && product.units_per_case < 1) {
+        throw new Error("Set units per case on this product first");
+      }
+      const add = basis === "case" ? amount * product.units_per_case : amount;
       const { error } = await supabase
         .from("products")
-        .update({ quantity_on_hand: product.quantity_on_hand + amount })
+        .update({ quantity_on_hand: product.quantity_on_hand + add })
         .eq("id", product.id);
       if (error) throw error;
-      return `${amount} added to ${product.name}`;
+      return `${add} unit${add === 1 ? "" : "s"} added to ${product.name}`;
     },
     onSuccess: (message) => {
       toast.success(message);
       setQty("");
       setProductId("");
+      setBasis("unit");
       onOpenChange(false);
       onSaved();
     },
@@ -658,16 +672,17 @@ function AddStockDialog({
         if (!next) {
           setProductId("");
           setQty("");
+          setBasis("unit");
         }
         onOpenChange(next);
       }}
     >
       <DialogContent className="panel rounded-xl">
         <DialogHeader>
-          <DialogTitle className="font-display">
-            Add {stockKindLabel(stockKind).toLowerCase()} stock
-          </DialogTitle>
-          <DialogDescription>Adds to the quantity already on hand.</DialogDescription>
+          <DialogTitle className="font-display">Add stock</DialogTitle>
+          <DialogDescription>
+            Add loose units or whole cases. Cases convert using units per case.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -689,11 +704,33 @@ function AddStockDialog({
               <option value="">Select a product…</option>
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} · {p.quantity_on_hand} on hand
+                  {p.name} · {p.quantity_on_hand} on hand · {p.units_per_case}/case
                 </option>
               ))}
             </select>
           </div>
+
+          <div>
+            <p className={labelClass}>Entering</p>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              {(["unit", "case"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setBasis(mode)}
+                  className={cn(
+                    "btn-press rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors",
+                    basis === mode
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-line bg-paper text-ink hover:bg-secondary",
+                  )}
+                >
+                  {mode === "unit" ? "Units" : "Cases"}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className={labelClass} htmlFor="s-qty">
               Quantity to add
@@ -707,6 +744,13 @@ function AddStockDialog({
               onChange={(e) => setQty(e.target.value)}
               className={`${fieldClass} tabular font-mono`}
             />
+            {product && unitsToAdd > 0 ? (
+              <p className="mt-1.5 text-sm text-soft">
+                Adds {unitsToAdd.toLocaleString("en-ZA")} unit
+                {unitsToAdd === 1 ? "" : "s"} to on hand
+                {basis === "case" ? ` (${amount} × ${product.units_per_case})` : ""}
+              </p>
+            ) : null}
           </div>
           <DialogFooter>
             <button type="submit" className={primaryBtn} disabled={save.isPending}>

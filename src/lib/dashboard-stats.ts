@@ -15,6 +15,8 @@ export type InvoiceItemRow = {
   unit_price: number;
   line_total: number;
   created_at: string;
+  qty_basis?: "unit" | "case";
+  units_per_case?: number;
 };
 
 export type ProductCost = {
@@ -111,13 +113,16 @@ export function buildDashboardStats(
   let missingCostLines = 0;
 
   for (const item of itemsInRange) {
-    unitsSold += item.quantity;
+    const pack = Math.max(1, item.units_per_case ?? 1);
+    const unitsMoved =
+      item.qty_basis === "case" ? item.quantity * pack : item.quantity;
+    unitsSold += unitsMoved;
     revenue += item.line_total;
 
     const product = item.product_id ? productMap.get(item.product_id) : undefined;
     const unitCost = product ? product.cost_price : null;
     if (unitCost == null) missingCostLines += 1;
-    const lineCost = (unitCost ?? 0) * item.quantity;
+    const lineCost = (unitCost ?? 0) * unitsMoved;
     cogs += lineCost;
 
     const key = item.product_id ?? `name:${item.product_name}`;
@@ -129,7 +134,7 @@ export function buildDashboardStats(
       cost: 0,
       profit: 0,
     };
-    existing.units += item.quantity;
+    existing.units += unitsMoved;
     existing.revenue += item.line_total;
     existing.cost += lineCost;
     existing.profit = existing.revenue - existing.cost;
@@ -167,7 +172,10 @@ export function buildDashboardStats(
   const profitByInvoice = new Map<string, number>();
   for (const item of itemsInRange) {
     const product = item.product_id ? productMap.get(item.product_id) : undefined;
-    const lineProfit = item.line_total - (product?.cost_price ?? 0) * item.quantity;
+    const pack = Math.max(1, item.units_per_case ?? 1);
+    const unitsMoved =
+      item.qty_basis === "case" ? item.quantity * pack : item.quantity;
+    const lineProfit = item.line_total - (product?.cost_price ?? 0) * unitsMoved;
     profitByInvoice.set(
       item.invoice_id,
       (profitByInvoice.get(item.invoice_id) ?? 0) + lineProfit,
@@ -205,7 +213,7 @@ export function buildDashboardStats(
   }
 
   const stockValue = products.reduce(
-    (sum, p) => sum + p.quantity_on_hand * p.selling_price,
+    (sum, p) => sum + p.quantity_on_hand * p.cost_price,
     0,
   );
   const stockUnits = products.reduce((sum, p) => sum + p.quantity_on_hand, 0);
