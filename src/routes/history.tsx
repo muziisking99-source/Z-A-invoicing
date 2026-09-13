@@ -9,7 +9,6 @@ import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 import {
   chargedLinePrice,
   priceBasisLabel,
-  qtyBasisLabel,
   unitsForLine,
   type PriceBasis,
   type QtyBasis,
@@ -357,9 +356,15 @@ function HistoryPage() {
                           <td className="px-3 py-2.5 font-medium sm:px-4 sm:py-3">
                             <span>{item.product_name}</span>
                             <span className="mt-0.5 block text-xs font-normal text-soft">
-                              {item.quantity} {qtyBasisLabel(item.qty_basis).toLowerCase()}
-                              {item.quantity === 1 ? "" : "s"} ·{" "}
-                              {priceBasisLabel(item.price_basis)} price
+                              {item.quantity}{" "}
+                              {item.qty_basis === "case"
+                                ? item.quantity === 1
+                                  ? "case"
+                                  : "cases"
+                                : item.quantity === 1
+                                  ? "unit"
+                                  : "units"}{" "}
+                              · {priceBasisLabel(item.price_basis)} price
                               {item.qty_basis === "case"
                                 ? ` · ${unitsMoved} units`
                                 : ""}

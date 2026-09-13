@@ -405,7 +405,7 @@ function NewInvoicePage() {
                             },
                             {
                               basis: "case" as const,
-                              label: "Case",
+                              label: "Cases",
                               sub:
                                 row.product && row.canUseCase
                                   ? money(row.product.case_price)
@@ -509,7 +509,7 @@ function NewInvoicePage() {
                           className="mb-1.5 block text-sm font-medium text-soft"
                           htmlFor={`qty-${row.line.key}`}
                         >
-                          Qty ({qtyBasisLabel(row.line.qtyBasis).toLowerCase()}s)
+                          Qty ({qtyBasisLabel(row.line.qtyBasis).toLowerCase()})
                         </label>
                         <input
                           id={`qty-${row.line.key}`}

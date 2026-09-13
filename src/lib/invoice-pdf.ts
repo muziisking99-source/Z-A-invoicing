@@ -2,7 +2,6 @@ import { money, shortDate } from "@/lib/format";
 import {
   chargedLinePrice,
   priceBasisLabel,
-  qtyBasisLabel,
   type PriceBasis,
   type QtyBasis,
 } from "@/lib/products";
@@ -134,7 +133,7 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
     const qtyBasis = item.qty_basis === "case" ? "case" : "unit";
     const pack = Math.max(1, item.units_per_case ?? 1);
     const unitsMoved = qtyBasis === "case" ? item.quantity * pack : item.quantity;
-    const note = ` (${qtyBasisLabel(qtyBasis).toLowerCase()} · ${priceBasisLabel(item.price_basis).toLowerCase()} price${
+    const note = ` (${qtyBasis === "case" ? "cases" : "units"} · ${priceBasisLabel(item.price_basis).toLowerCase()} price${
       qtyBasis === "case" ? ` · ${unitsMoved} units` : ""
     })`;
     const nameLines = doc.splitTextToSize(`${item.product_name}${note}`, descMaxW);

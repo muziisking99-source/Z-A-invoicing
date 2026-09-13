@@ -39,7 +39,7 @@ export function priceBasisLabel(basis: PriceBasis) {
 }
 
 export function qtyBasisLabel(basis: QtyBasis) {
-  return basis === "case" ? "Case" : "Unit";
+  return basis === "case" ? "Cases" : "Units";
 }
 
 export function useProducts() {

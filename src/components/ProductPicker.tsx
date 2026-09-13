@@ -263,7 +263,7 @@ export function ProductPicker({
                       Case {money(selected.case_price)}
                     </span>
                   ) : null}
-                  <span className="text-sm text-soft">{selected.units_per_case}/case</span>
+                  <span className="text-sm text-soft">{selected.units_per_case} per case</span>
                   <span
                     className={cn(
                       "text-sm",
@@ -428,7 +428,8 @@ export function ProductPicker({
                                 isSelected ? "text-accent-ink/80" : "text-soft",
                               )}
                             >
-                              {product.quantity_on_hand} on hand · {product.units_per_case}/case
+                              {product.quantity_on_hand} on hand · {product.units_per_case} per
+                              case
                             </span>
                           )}
                         </span>

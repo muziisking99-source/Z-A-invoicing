@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
+import { ProductPicker } from "@/components/ProductPicker";
 import { money } from "@/lib/format";
 import { useProducts, type Product, type QtyBasis } from "@/lib/products";
 import { cn } from "@/lib/utils";
@@ -204,7 +205,7 @@ function StockPage() {
                 <th className="px-5 py-3.5">Name</th>
                 <th className="px-5 py-3.5 text-right">Cost</th>
                 <th className="px-5 py-3.5 text-right">Unit</th>
-                <th className="px-5 py-3.5 text-right">Case</th>
+                <th className="px-5 py-3.5 text-right">Cases</th>
                 <th className="px-5 py-3.5 text-right">Pack</th>
                 <th className="px-5 py-3.5 text-right">On hand</th>
                 <th className="px-5 py-3.5 text-right">Value</th>
@@ -677,41 +678,34 @@ function AddStockDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="panel rounded-xl">
+      <DialogContent className="panel overflow-visible rounded-xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display">Add stock</DialogTitle>
           <DialogDescription>
-            Add loose units or whole cases. Cases convert using units per case.
+            Search a product, then add loose units or whole cases.
           </DialogDescription>
         </DialogHeader>
         <form
-          className="space-y-3"
+          className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             save.mutate();
           }}
         >
           <div>
-            <label className={labelClass} htmlFor="s-product">
-              Product
-            </label>
-            <select
-              id="s-product"
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              className={fieldClass}
-            >
-              <option value="">Select a product…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} · {p.quantity_on_hand} on hand · {p.units_per_case}/case
-                </option>
-              ))}
-            </select>
+            <p className={labelClass}>Product</p>
+            <div className="mt-1.5">
+              <ProductPicker
+                products={products}
+                value={productId}
+                onChange={setProductId}
+                aria-label="Search products"
+              />
+            </div>
           </div>
 
           <div>
-            <p className={labelClass}>Entering</p>
+            <p className={labelClass}>Entering as</p>
             <div className="mt-1.5 grid grid-cols-2 gap-2">
               {(["unit", "case"] as const).map((mode) => (
                 <button
@@ -719,13 +713,25 @@ function AddStockDialog({
                   type="button"
                   onClick={() => setBasis(mode)}
                   className={cn(
-                    "btn-press rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors",
+                    "btn-press rounded-lg border px-3 py-3 text-left text-sm font-semibold transition-colors",
                     basis === mode
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-line bg-paper text-ink hover:bg-secondary",
                   )}
                 >
-                  {mode === "unit" ? "Units" : "Cases"}
+                  <span className="block">{mode === "unit" ? "Units" : "Cases"}</span>
+                  <span
+                    className={cn(
+                      "mt-0.5 block text-xs font-normal",
+                      basis === mode ? "text-primary-foreground/85" : "text-soft",
+                    )}
+                  >
+                    {mode === "unit"
+                      ? "Loose items"
+                      : product
+                        ? `${product.units_per_case} units each`
+                        : "Whole cases"}
+                  </span>
                 </button>
               ))}
             </div>
@@ -740,21 +746,28 @@ function AddStockDialog({
               type="number"
               min="1"
               step="1"
+              inputMode="numeric"
+              placeholder="0"
               value={qty}
               onChange={(e) => setQty(e.target.value)}
-              className={`${fieldClass} tabular font-mono`}
+              className={`${fieldClass} tabular font-mono text-right text-lg`}
             />
             {product && unitsToAdd > 0 ? (
-              <p className="mt-1.5 text-sm text-soft">
+              <p className="mt-2 rounded-lg bg-accent/50 px-3 py-2 text-sm font-medium text-accent-ink">
                 Adds {unitsToAdd.toLocaleString("en-ZA")} unit
                 {unitsToAdd === 1 ? "" : "s"} to on hand
                 {basis === "case" ? ` (${amount} × ${product.units_per_case})` : ""}
+              </p>
+            ) : product ? (
+              <p className="mt-1.5 text-sm text-soft">
+                Currently {product.quantity_on_hand.toLocaleString("en-ZA")} on hand ·{" "}
+                {product.units_per_case} per case
               </p>
             ) : null}
           </div>
           <DialogFooter>
             <button type="submit" className={primaryBtn} disabled={save.isPending}>
-              Add to stock
+              {save.isPending ? "Adding…" : "Add to stock"}
             </button>
           </DialogFooter>
         </form>
