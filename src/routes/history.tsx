@@ -6,8 +6,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { money, shortDate } from "@/lib/format";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
-import { cn } from "@/lib/utils";
-import type { PriceBasis } from "@/lib/products";
+import {
+  chargedLinePrice,
+  stockKindLabel,
+  type PriceBasis,
+} from "@/lib/products";
 import {
   Dialog,
   DialogContent,
@@ -305,26 +308,25 @@ function HistoryPage() {
               </DialogHeader>
 
               <div className="mt-2 overflow-x-auto rounded-lg border border-line">
-                <table className="w-full min-w-[28rem] text-left text-sm sm:text-base">
+                <table className="w-full min-w-[24rem] text-left text-sm sm:text-base">
                   <thead>
                     <tr className="border-b border-line bg-secondary text-xs font-semibold uppercase tracking-wide text-soft sm:text-sm">
                       <th className="px-3 py-2.5 sm:px-4 sm:py-3">Product</th>
                       <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Qty</th>
-                      <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Unit</th>
-                      <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Case</th>
+                      <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Price</th>
                       <th className="px-3 py-2.5 text-right sm:px-4 sm:py-3">Line</th>
                     </tr>
                   </thead>
                   <tbody>
                     {itemsLoading ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8">
+                        <td colSpan={4} className="px-4 py-8">
                           <div className="skeleton-bar mx-auto h-5 w-2/3" />
                         </td>
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-soft">
+                        <td colSpan={4} className="px-4 py-8 text-center text-soft">
                           No line items
                         </td>
                       </tr>
@@ -334,31 +336,14 @@ function HistoryPage() {
                           <td className="px-3 py-2.5 font-medium sm:px-4 sm:py-3">
                             <span>{item.product_name}</span>
                             <span className="mt-0.5 block text-xs font-normal text-soft">
-                              Charged at {item.price_basis === "case" ? "case" : "unit"} price
+                              {stockKindLabel(item.price_basis)} stock
                             </span>
                           </td>
                           <td className="tabular px-3 py-2.5 text-right font-mono sm:px-4 sm:py-3">
                             {item.quantity}
                           </td>
-                          <td
-                            className={cn(
-                              "tabular px-3 py-2.5 text-right font-mono sm:px-4 sm:py-3",
-                              item.price_basis === "unit"
-                                ? "font-semibold text-accent-ink"
-                                : "text-soft",
-                            )}
-                          >
-                            {money(item.unit_price)}
-                          </td>
-                          <td
-                            className={cn(
-                              "tabular px-3 py-2.5 text-right font-mono sm:px-4 sm:py-3",
-                              item.price_basis === "case"
-                                ? "font-semibold text-accent-ink"
-                                : "text-soft",
-                            )}
-                          >
-                            {item.case_price > 0 ? money(item.case_price) : "—"}
+                          <td className="tabular px-3 py-2.5 text-right font-mono font-semibold text-accent-ink sm:px-4 sm:py-3">
+                            {money(chargedLinePrice(item))}
                           </td>
                           <td className="tabular px-3 py-2.5 text-right font-mono font-semibold sm:px-4 sm:py-3">
                             {money(item.line_total)}

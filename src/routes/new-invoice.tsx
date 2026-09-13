@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { money } from "@/lib/format";
 import { downloadInvoicePdf, type InvoicePdfData } from "@/lib/invoice-pdf";
-import { useProducts, chargePrice, type PriceBasis, type Product } from "@/lib/products";
+import { stockKindLabel, useProducts, type Product } from "@/lib/products";
 import { ProductPicker } from "@/components/ProductPicker";
 import { cn } from "@/lib/utils";
 import {
@@ -39,13 +39,23 @@ export const Route = createFileRoute("/new-invoice")({
   component: NewInvoicePage,
 });
 
-type Line = { key: string; productId: string; quantity: string; priceBasis: PriceBasis };
+type PriceMode = "catalog" | "manual";
+
+type Line = {
+  key: string;
+  productId: string;
+  quantity: string;
+  priceMode: PriceMode;
+  /** Used when priceMode is manual. */
+  manualPrice: string;
+};
 
 const newLine = (): Line => ({
   key: Math.random().toString(36).slice(2),
   productId: "",
   quantity: "1",
-  priceBasis: "unit",
+  priceMode: "catalog",
+  manualPrice: "",
 });
 
 const fieldClass =
@@ -84,23 +94,25 @@ function NewInvoicePage() {
     const product = byId.get(line.productId) as Product | undefined;
     const qty = Number(line.quantity);
     const quantity = Number.isFinite(qty) ? Math.floor(qty) : 0;
-    const unitPrice = product?.selling_price ?? 0;
-    const casePrice = product?.case_price ?? 0;
-    const canUseCase = casePrice > 0;
-    const priceBasis: PriceBasis =
-      line.priceBasis === "case" && canUseCase ? "case" : "unit";
-    const charge = product ? chargePrice(product, priceBasis) : 0;
+    const catalogPrice = product?.selling_price ?? 0;
+    const parsedManual = Number(line.manualPrice);
+    const usingManual = line.priceMode === "manual";
+    const charge = usingManual
+      ? Number.isFinite(parsedManual) && parsedManual >= 0
+        ? parsedManual
+        : 0
+      : catalogPrice;
+    const priceBasis = product?.stock_kind ?? "unit";
     const demanded = product ? (demandByProduct.get(product.id) ?? 0) : 0;
     const shortfall = !!product && demanded > product.quantity_on_hand;
     return {
       line,
       product,
       quantity,
-      unitPrice,
-      casePrice,
-      priceBasis,
-      canUseCase,
       charge,
+      catalogPrice,
+      usingManual,
+      priceBasis,
       amount: quantity * charge,
       shortfall,
       demanded,
@@ -117,14 +129,17 @@ function NewInvoicePage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const caseWithoutPrice = filledLines.find(
-        (row) => row.priceBasis === "case" && row.casePrice <= 0,
-      );
-      if (caseWithoutPrice) {
-        throw new Error(`Case price is not set for ${caseWithoutPrice.product!.name}`);
-      }
       if (deliveryCost < 0) {
         throw new Error("Delivery cost cannot be negative");
+      }
+      const badPrice = filledLines.find(
+        (row) => row.usingManual && (!Number.isFinite(row.charge) || row.charge < 0),
+      );
+      if (badPrice) {
+        throw new Error(`Enter a valid price for ${badPrice.product!.name}`);
+      }
+      if (filledLines.some((row) => row.usingManual && row.line.manualPrice.trim() === "")) {
+        throw new Error("Enter a manual price for each line that uses Manual");
       }
       const snapshot = {
         customer_name: customer.trim(),
@@ -133,8 +148,8 @@ function NewInvoicePage() {
         items: filledLines.map((row) => ({
           product_name: row.product!.name,
           quantity: row.quantity,
-          unit_price: row.unitPrice,
-          case_price: row.casePrice,
+          unit_price: row.priceBasis === "unit" ? row.charge : row.product!.selling_price,
+          case_price: row.priceBasis === "case" ? row.charge : 0,
           price_basis: row.priceBasis,
           line_total: row.amount,
         })),
@@ -144,7 +159,7 @@ function NewInvoicePage() {
         p_items: filledLines.map((row) => ({
           product_id: row.product!.id,
           quantity: row.quantity,
-          price_basis: row.priceBasis,
+          unit_price: row.charge,
         })),
         p_delivery_cost: deliveryCost,
       });
@@ -184,6 +199,13 @@ function NewInvoicePage() {
     }
     if (filledLines.length === 0) {
       toast.error("Add at least one line item");
+      return;
+    }
+    const needsManual = filledLines.find(
+      (row) => row.usingManual && row.line.manualPrice.trim() === "",
+    );
+    if (needsManual) {
+      toast.error(`Enter a manual price for ${needsManual.product!.name}`);
       return;
     }
     const short = resolved.find((row) => row.shortfall);
@@ -271,84 +293,130 @@ function NewInvoicePage() {
                       <ProductPicker
                         products={products}
                         value={row.line.productId}
-                        onChange={(productId) =>
+                        onChange={(productId) => {
                           setLines((prev) =>
                             prev.map((l) =>
                               l.key === row.line.key
-                                ? { ...l, productId, priceBasis: "unit" }
+                                ? {
+                                    ...l,
+                                    productId,
+                                    priceMode: "catalog",
+                                    manualPrice: "",
+                                  }
                                 : l,
                             ),
-                          )
-                        }
+                          );
+                        }}
                       />
                     </div>
 
                     <div>
                       <p className="mb-1.5 text-sm font-medium text-soft">Price</p>
                       <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.line.key ? { ...l, priceBasis: "unit" } : l,
-                              ),
-                            )
-                          }
-                          className={cn(
-                            "btn-press rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors",
-                            row.priceBasis === "unit"
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-line bg-paper text-ink hover:bg-secondary",
-                          )}
-                        >
-                          <span className="block">Unit</span>
-                          <span
-                            className={cn(
-                              "font-mono text-xs tabular-nums",
-                              row.priceBasis === "unit"
-                                ? "text-primary-foreground/90"
-                                : "text-soft",
-                            )}
-                          >
-                            {row.product ? money(row.unitPrice) : "—"}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!row.canUseCase}
-                          title={
-                            row.product && !row.canUseCase
-                              ? "Set a case price on this product first"
-                              : undefined
-                          }
-                          onClick={() =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.line.key ? { ...l, priceBasis: "case" } : l,
-                              ),
-                            )
-                          }
-                          className={cn(
-                            "btn-press rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-                            row.priceBasis === "case"
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-line bg-paper text-ink hover:bg-secondary",
-                          )}
-                        >
-                          <span className="block">Case</span>
-                          <span
-                            className={cn(
-                              "font-mono text-xs tabular-nums",
-                              row.priceBasis === "case"
-                                ? "text-primary-foreground/90"
-                                : "text-soft",
-                            )}
-                          >
-                            {row.product && row.canUseCase ? money(row.casePrice) : "—"}
-                          </span>
-                        </button>
+                        {(["unit", "case"] as const).map((slot) => {
+                          const isCatalogSlot =
+                            !!row.product && row.product.stock_kind === slot;
+                          const isManualSlot = !!row.product && !isCatalogSlot;
+                          const catalogActive =
+                            isCatalogSlot && row.line.priceMode === "catalog";
+                          const manualActive =
+                            isManualSlot && row.line.priceMode === "manual";
+                          const active = catalogActive || manualActive;
+
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              disabled={!row.product}
+                              onClick={() => {
+                                if (!row.product) return;
+                                if (isCatalogSlot) {
+                                  setLines((prev) =>
+                                    prev.map((l) =>
+                                      l.key === row.line.key
+                                        ? { ...l, priceMode: "catalog" }
+                                        : l,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                setLines((prev) =>
+                                  prev.map((l) =>
+                                    l.key === row.line.key
+                                      ? {
+                                          ...l,
+                                          priceMode: "manual",
+                                          manualPrice:
+                                            l.manualPrice ||
+                                            String(row.product!.selling_price),
+                                        }
+                                      : l,
+                                  ),
+                                );
+                              }}
+                              className={cn(
+                                "btn-press rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                                active
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-line bg-paper text-ink hover:bg-secondary",
+                              )}
+                            >
+                              <span className="block">
+                                {isManualSlot
+                                  ? "Manual"
+                                  : stockKindLabel(slot)}
+                              </span>
+                              <span
+                                className={cn(
+                                  "font-mono text-xs tabular-nums",
+                                  active
+                                    ? "text-primary-foreground/90"
+                                    : "text-soft",
+                                )}
+                              >
+                                {!row.product
+                                  ? "—"
+                                  : isCatalogSlot
+                                    ? money(row.catalogPrice)
+                                    : row.line.priceMode === "manual" &&
+                                        row.line.manualPrice
+                                      ? money(row.charge)
+                                      : "Enter price"}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
+
+                      {row.product && row.line.priceMode === "manual" ? (
+                        <div className="mt-2">
+                          <label
+                            className="mb-1.5 block text-sm font-medium text-soft"
+                            htmlFor={`price-${row.line.key}`}
+                          >
+                            Manual price
+                          </label>
+                          <input
+                            id={`price-${row.line.key}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            autoFocus
+                            value={row.line.manualPrice}
+                            onChange={(e) =>
+                              setLines((prev) =>
+                                prev.map((l) =>
+                                  l.key === row.line.key
+                                    ? { ...l, manualPrice: e.target.value }
+                                    : l,
+                                ),
+                              )
+                            }
+                            className="h-12 w-full rounded-lg border border-line bg-paper px-3 text-right text-base font-medium tabular-nums outline-none transition-colors duration-150 focus:border-primary focus:ring-2 focus:ring-ring/25 sm:h-[50px]"
+                          />
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">

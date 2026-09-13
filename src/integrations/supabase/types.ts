@@ -104,6 +104,7 @@ export type Database = {
           name: string
           quantity_on_hand: number
           selling_price: number
+          stock_kind: string
         }
         Insert: {
           case_price?: number
@@ -113,6 +114,7 @@ export type Database = {
           name: string
           quantity_on_hand?: number
           selling_price?: number
+          stock_kind?: string
         }
         Update: {
           case_price?: number
@@ -122,6 +124,7 @@ export type Database = {
           name?: string
           quantity_on_hand?: number
           selling_price?: number
+          stock_kind?: string
         }
         Relationships: []
       }

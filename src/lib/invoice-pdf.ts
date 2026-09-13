@@ -1,5 +1,5 @@
 import { money, shortDate } from "@/lib/format";
-import type { PriceBasis } from "@/lib/products";
+import { chargedLinePrice, stockKindLabel, type PriceBasis } from "@/lib/products";
 
 export type InvoicePdfItem = {
   product_name: string;
@@ -101,12 +101,11 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
   y += 20;
 
-  // Table columns — shared right edges so headers and values line up
+  // Table columns — Description | Qty | Price | Total
   const padX = 10;
   const colDesc = left + padX;
-  const colQty = left + contentW * 0.5;
-  const colUnit = left + contentW * 0.66;
-  const colCase = left + contentW * 0.82;
+  const colQty = left + contentW * 0.55;
+  const colPrice = left + contentW * 0.75;
   const colTotal = right - padX;
   const descMaxW = colQty - colDesc - 12;
   const rowH = 28;
@@ -120,8 +119,7 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   const headerY = y + 18;
   doc.text("Description", colDesc, headerY);
   doc.text("Qty", colQty, headerY, { align: "right" });
-  doc.text("Unit", colUnit, headerY, { align: "right" });
-  doc.text("Case", colCase, headerY, { align: "right" });
+  doc.text("Price", colPrice, headerY, { align: "right" });
   doc.text("Total", colTotal, headerY, { align: "right" });
 
   y += rowH;
@@ -131,13 +129,10 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
   let alt = false;
 
   for (const item of invoice.items) {
-    const basisNote =
-      item.price_basis === "case" ? " (case price)" : " (unit price)";
-    const nameLines = doc.splitTextToSize(
-      `${item.product_name}${basisNote}`,
-      descMaxW,
-    );
+    const kindNote = ` (${stockKindLabel(item.price_basis).toLowerCase()})`;
+    const nameLines = doc.splitTextToSize(`${item.product_name}${kindNote}`, descMaxW);
     const blockH = Math.max(rowH, nameLines.length * 12 + 14);
+    const price = chargedLinePrice(item);
 
     if (y + blockH > pageH - 160) {
       doc.addPage();
@@ -161,13 +156,7 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
     doc.setFont("helvetica", "normal");
     doc.text(nameLines, colDesc, textY);
     doc.text(String(item.quantity), colQty, textY, { align: "right" });
-    doc.text(money(item.unit_price), colUnit, textY, { align: "right" });
-    doc.text(
-      item.case_price > 0 ? money(item.case_price) : "—",
-      colCase,
-      textY,
-      { align: "right" },
-    );
+    doc.text(money(price), colPrice, textY, { align: "right" });
     doc.setFont("helvetica", "bold");
     doc.text(money(item.line_total), colTotal, textY, { align: "right" });
     doc.setFont("helvetica", "normal");
