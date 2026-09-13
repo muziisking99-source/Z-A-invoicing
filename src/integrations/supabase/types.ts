@@ -136,8 +136,8 @@ export type Database = {
       create_invoice: {
         Args: {
           p_customer_name: string
-          p_items: Json
           p_delivery_cost?: number
+          p_items: Json
         }
         Returns: {
           created_at: string
@@ -154,10 +154,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      delete_invoice: {
-        Args: { p_invoice_id: string }
-        Returns: undefined
-      }
+      delete_invoice: { Args: { p_invoice_id: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
