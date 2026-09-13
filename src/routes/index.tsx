@@ -144,7 +144,7 @@ function StockPage() {
                     product.quantity_on_hand === 0 ? "text-destructive" : "text-ink"
                   }`}
                 >
-                  {product.quantity_on_hand} on hand
+                  {product.quantity_on_hand} units on hand
                 </p>
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -153,8 +153,8 @@ function StockPage() {
                   <dd className="font-medium tabular-nums">{money(product.cost_price)}</dd>
                 </div>
                 <div>
-                  <dt className="text-soft">Pack</dt>
-                  <dd className="font-medium tabular-nums">{product.units_per_case} / case</dd>
+                  <dt className="text-soft">Units per case</dt>
+                  <dd className="font-medium tabular-nums">{product.units_per_case}</dd>
                 </div>
                 <div>
                   <dt className="text-soft">Unit price</dt>
@@ -165,6 +165,10 @@ function StockPage() {
                   <dd className="font-medium tabular-nums">
                     {product.case_price > 0 ? money(product.case_price) : "—"}
                   </dd>
+                </div>
+                <div>
+                  <dt className="text-soft">Units on hand</dt>
+                  <dd className="font-medium tabular-nums">{product.quantity_on_hand}</dd>
                 </div>
                 <div className="col-span-2">
                   <dt className="text-soft">Value (cost)</dt>
@@ -206,8 +210,8 @@ function StockPage() {
                 <th className="px-5 py-3.5 text-right">Cost</th>
                 <th className="px-5 py-3.5 text-right">Unit</th>
                 <th className="px-5 py-3.5 text-right">Cases</th>
-                <th className="px-5 py-3.5 text-right">Pack</th>
-                <th className="px-5 py-3.5 text-right">On hand</th>
+                <th className="px-5 py-3.5 text-right">Units per case</th>
+                <th className="px-5 py-3.5 text-right">Units on hand</th>
                 <th className="px-5 py-3.5 text-right">Value</th>
                 <th className="px-5 py-3.5" />
               </tr>
