@@ -1,41 +1,5 @@
--- Unified products: units_per_case; invoice qty can be units or cases; manual price.
-
-ALTER TABLE public.products
-  ADD COLUMN IF NOT EXISTS units_per_case integer NOT NULL DEFAULT 1;
-
-ALTER TABLE public.products
-  DROP CONSTRAINT IF EXISTS products_units_per_case_check;
-
-ALTER TABLE public.products
-  ADD CONSTRAINT products_units_per_case_check
-  CHECK (units_per_case >= 1);
-
-UPDATE public.products
-SET units_per_case = 1
-WHERE units_per_case IS NULL OR units_per_case < 1;
-
-ALTER TABLE public.invoice_items
-  ADD COLUMN IF NOT EXISTS qty_basis text NOT NULL DEFAULT 'unit';
-
-ALTER TABLE public.invoice_items
-  ADD COLUMN IF NOT EXISTS units_per_case integer NOT NULL DEFAULT 1;
-
-ALTER TABLE public.invoice_items
-  DROP CONSTRAINT IF EXISTS invoice_items_qty_basis_check;
-
-ALTER TABLE public.invoice_items
-  ADD CONSTRAINT invoice_items_qty_basis_check
-  CHECK (qty_basis IN ('unit', 'case'));
-
-ALTER TABLE public.invoice_items
-  DROP CONSTRAINT IF EXISTS invoice_items_price_basis_check;
-
-ALTER TABLE public.invoice_items
-  ADD CONSTRAINT invoice_items_price_basis_check
-  CHECK (price_basis IN ('unit', 'case', 'manual'));
-
-DROP FUNCTION IF EXISTS public.create_invoice(text, jsonb, numeric);
-
+-- When qty_basis is case, line total = (qty × units_per_case) × charge.
+-- Stock deduct uses the same unit count.
 CREATE OR REPLACE FUNCTION public.create_invoice(
   p_customer_name text,
   p_items jsonb,
@@ -56,6 +20,7 @@ DECLARE
   v_pack integer;
   v_units integer;
   v_charge numeric(12,2);
+  v_line numeric(12,2);
   v_subtotal numeric(12,2) := 0;
   v_delivery numeric(12,2);
   v_agg record;
@@ -159,10 +124,11 @@ BEGIN
     END IF;
 
     IF v_qty_basis = 'case' THEN
-      v_subtotal := v_subtotal + (v_qty * v_pack * v_charge);
+      v_line := v_qty * v_pack * v_charge;
     ELSE
-      v_subtotal := v_subtotal + (v_qty * v_charge);
+      v_line := v_qty * v_charge;
     END IF;
+    v_subtotal := v_subtotal + v_line;
   END LOOP;
 
   INSERT INTO public.invoices (customer_name, total, delivery_cost)
@@ -196,8 +162,10 @@ BEGIN
 
     IF v_qty_basis = 'case' THEN
       v_units := v_qty * v_pack;
+      v_line := v_units * v_charge;
     ELSE
       v_units := v_qty;
+      v_line := v_qty * v_charge;
     END IF;
 
     INSERT INTO public.invoice_items (
@@ -214,10 +182,7 @@ BEGIN
       v_price_basis,
       v_qty_basis,
       v_pack,
-      CASE
-        WHEN v_qty_basis = 'case' THEN v_units * v_charge
-        ELSE v_qty * v_charge
-      END
+      v_line
     );
 
     UPDATE public.products
@@ -230,46 +195,3 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.create_invoice(text, jsonb, numeric) TO authenticated;
-
-CREATE OR REPLACE FUNCTION public.delete_invoice(p_invoice_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = public
-AS $$
-DECLARE
-  v_agg record;
-BEGIN
-  IF p_invoice_id IS NULL THEN
-    RAISE EXCEPTION 'Invoice is required';
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM public.invoices WHERE id = p_invoice_id) THEN
-    RAISE EXCEPTION 'Invoice not found';
-  END IF;
-
-  FOR v_agg IN
-    SELECT
-      product_id,
-      sum(
-        CASE
-          WHEN qty_basis = 'case'
-            THEN quantity * greatest(coalesce(units_per_case, 1), 1)
-          ELSE quantity
-        END
-      )::integer AS units
-    FROM public.invoice_items
-    WHERE invoice_id = p_invoice_id
-      AND product_id IS NOT NULL
-    GROUP BY product_id
-  LOOP
-    UPDATE public.products
-    SET quantity_on_hand = quantity_on_hand + v_agg.units
-    WHERE id = v_agg.product_id;
-  END LOOP;
-
-  DELETE FROM public.invoices WHERE id = p_invoice_id;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.delete_invoice(uuid) TO authenticated;

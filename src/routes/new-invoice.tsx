@@ -124,6 +124,9 @@ function NewInvoicePage() {
     const unitsMoved = product
       ? unitsForLine(quantity, line.qtyBasis, product.units_per_case)
       : 0;
+    // When invoicing by cases, charge × total units in those cases.
+    // When invoicing by units, charge × entered qty.
+    const billableQty = line.qtyBasis === "case" ? unitsMoved : quantity;
     const demanded = product ? (demandByProduct.get(product.id) ?? 0) : 0;
     const shortfall = !!product && demanded > product.quantity_on_hand;
     return {
@@ -134,7 +137,8 @@ function NewInvoicePage() {
       canUseCase,
       charge,
       unitsMoved,
-      amount: quantity * charge,
+      billableQty,
+      amount: billableQty * charge,
       shortfall,
       demanded,
     };
@@ -537,6 +541,13 @@ function NewInvoicePage() {
                         <div className="flex h-12 items-center justify-end rounded-lg border border-line bg-secondary/70 px-3 text-base font-semibold tabular-nums text-accent-ink sm:h-[50px]">
                           {money(row.amount)}
                         </div>
+                        {row.product && row.quantity > 0 && row.charge > 0 ? (
+                          <p className="mt-1 text-right text-xs text-soft">
+                            {row.line.qtyBasis === "case"
+                              ? `${row.quantity} cases × ${row.product.units_per_case} = ${row.unitsMoved} units × ${money(row.charge)}`
+                              : `${row.quantity} × ${money(row.charge)}`}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
