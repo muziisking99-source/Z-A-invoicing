@@ -124,9 +124,9 @@ function NewInvoicePage() {
     const unitsMoved = product
       ? unitsForLine(quantity, line.qtyBasis, product.units_per_case)
       : 0;
-    // When invoicing by cases, charge × total units in those cases.
-    // When invoicing by units, charge × entered qty.
-    const billableQty = line.qtyBasis === "case" ? unitsMoved : quantity;
+    // Charge is always the entered price (unit, case, or manual) × entered qty:
+    // e.g. 3 cases at case price = case_price × 3.
+    const billableQty = quantity;
     const demanded = product ? (demandByProduct.get(product.id) ?? 0) : 0;
     const shortfall = !!product && demanded > product.quantity_on_hand;
     return {
