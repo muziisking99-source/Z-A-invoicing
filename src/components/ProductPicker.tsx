@@ -71,6 +71,46 @@ function highlightMatches(name: string, tokens: string[]) {
   return <>{parts}</>;
 }
 
+function ProductMeta({
+  product,
+  tone = "default",
+}: {
+  product: Product;
+  tone?: "default" | "selected" | "active";
+}) {
+  const outOfStock = product.quantity_on_hand === 0;
+  const chip = cn(
+    "inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums",
+    tone === "selected"
+      ? "bg-paper/80 text-accent-ink"
+      : tone === "active"
+        ? "bg-paper text-ink"
+        : "bg-secondary text-ink",
+  );
+  const muted = tone === "selected" ? "text-accent-ink/80" : "text-soft";
+
+  return (
+    <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <span className={cn(chip, "font-mono font-semibold text-accent-ink")}>
+        Unit {money(product.selling_price)}
+      </span>
+      {product.case_price > 0 ? (
+        <span className={cn(chip, "font-mono")}>Cases {money(product.case_price)}</span>
+      ) : null}
+      <span className={cn(chip, muted)}>{product.units_per_case} per case</span>
+      {outOfStock ? (
+        <span className="inline-flex items-center rounded-md bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">
+          Out of stock
+        </span>
+      ) : (
+        <span className={cn(chip, muted)}>
+          {product.quantity_on_hand.toLocaleString("en-ZA")} units on hand
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function ProductPicker({
   products,
   value,
@@ -252,31 +292,9 @@ export function ProductPicker({
         >
           <span className="min-w-0 flex-1">
             {selected ? (
-              <span className="flex flex-col gap-1">
-                <span className="truncate font-medium text-ink">{selected.name}</span>
-                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="font-mono text-sm font-semibold tabular-nums text-accent-ink">
-                    Unit {money(selected.selling_price)}
-                  </span>
-                  {selected.case_price > 0 ? (
-                    <span className="font-mono text-sm tabular-nums text-soft">
-                      Case {money(selected.case_price)}
-                    </span>
-                  ) : null}
-                  <span className="text-sm text-soft">{selected.units_per_case} per case</span>
-                  <span
-                    className={cn(
-                      "text-sm",
-                      selected.quantity_on_hand === 0
-                        ? "font-medium text-destructive"
-                        : "text-soft",
-                    )}
-                  >
-                    {selected.quantity_on_hand === 0
-                      ? "Out of stock"
-                      : `${selected.quantity_on_hand} on hand`}
-                  </span>
-                </span>
+              <span className="flex flex-col">
+                <span className="truncate font-semibold text-ink">{selected.name}</span>
+                <ProductMeta product={selected} />
               </span>
             ) : (
               <span className="text-soft">Search products…</span>
@@ -381,58 +399,29 @@ export function ProductPicker({
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => selectProduct(product.id)}
                       className={cn(
-                        "relative flex min-h-[44px] w-full items-start gap-2 border-l-[3px] px-3.5 py-2.5 text-left transition-colors duration-150",
+                        "relative flex min-h-[52px] w-full items-start gap-3 border-l-[3px] px-3.5 py-3 text-left transition-colors duration-150",
                         isSelected
                           ? "border-l-primary bg-accent text-accent-ink"
                           : isActive
-                            ? "border-l-transparent bg-secondary text-ink"
-                            : "border-l-transparent text-ink hover:bg-secondary",
+                            ? "border-l-primary/40 bg-secondary text-ink"
+                            : "border-l-transparent text-ink hover:bg-secondary/80",
                       )}
                     >
                       <span className="min-w-0 flex-1">
                         <span
                           className={cn(
                             "block w-full truncate text-base",
-                            outOfStock && !isSelected ? "text-soft" : "font-medium",
+                            outOfStock && !isSelected
+                              ? "font-medium text-soft"
+                              : "font-semibold",
                           )}
                         >
                           {highlightMatches(product.name, tokens)}
                         </span>
-                        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span
-                            className={cn(
-                              "font-mono text-sm font-semibold tabular-nums",
-                              isSelected ? "text-accent-ink" : "text-accent-ink",
-                            )}
-                          >
-                            Unit {money(product.selling_price)}
-                          </span>
-                          {product.case_price > 0 ? (
-                            <span
-                              className={cn(
-                                "font-mono text-sm tabular-nums",
-                                isSelected ? "text-accent-ink/80" : "text-soft",
-                              )}
-                            >
-                              Case {money(product.case_price)}
-                            </span>
-                          ) : null}
-                          {outOfStock ? (
-                            <span className="text-sm font-medium text-destructive">
-                              Out of stock
-                            </span>
-                          ) : (
-                            <span
-                              className={cn(
-                                "text-sm tabular-nums",
-                                isSelected ? "text-accent-ink/80" : "text-soft",
-                              )}
-                            >
-                              {product.quantity_on_hand} on hand · {product.units_per_case} per
-                              case
-                            </span>
-                          )}
-                        </span>
+                        <ProductMeta
+                          product={product}
+                          tone={isSelected ? "selected" : isActive ? "active" : "default"}
+                        />
                       </span>
 
                       {isSelected ? (
