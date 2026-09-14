@@ -125,9 +125,7 @@ function NewInvoicePage() {
     const unitsMoved = product
       ? unitsForLine(quantity, line.qtyBasis, product.units_per_case)
       : 0;
-    const amount = product
-      ? lineAmount(quantity, line.qtyBasis, priceBasis, charge, product.units_per_case)
-      : 0;
+    const amount = product ? lineAmount(quantity, charge) : 0;
     const demanded = product ? (demandByProduct.get(product.id) ?? 0) : 0;
     const shortfall = !!product && demanded > product.quantity_on_hand;
     return {
@@ -543,11 +541,9 @@ function NewInvoicePage() {
                         </div>
                         {row.product && row.quantity > 0 && row.charge > 0 ? (
                           <p className="mt-1 text-right text-xs text-soft">
-                            {row.line.qtyBasis === "case" && row.priceBasis === "unit"
-                              ? `${row.quantity} cases × ${row.product.units_per_case} units × ${money(row.charge)}`
-                              : row.line.qtyBasis === "case"
-                                ? `${row.quantity} cases × ${money(row.charge)}`
-                                : `${row.quantity} × ${money(row.charge)}`}
+                            {row.line.qtyBasis === "case"
+                              ? `${row.quantity} cases × ${money(row.charge)}`
+                              : `${row.quantity} × ${money(row.charge)}`}
                           </p>
                         ) : null}
                       </div>

@@ -104,8 +104,7 @@ function ProductMeta({
         </span>
       ) : (
         <span className={cn(chip, muted)}>
-          {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)}{" "}
-          cases on hand
+          {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)} on hand
         </span>
       )}
     </span>

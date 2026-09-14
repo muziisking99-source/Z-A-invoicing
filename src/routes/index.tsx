@@ -7,8 +7,8 @@ import { AppShell, PageHeader } from "@/components/AppShell";
 import { ProductPicker } from "@/components/ProductPicker";
 import { money } from "@/lib/format";
 import {
-  casesOnHand,
   formatCasesOnHand,
+  splitCasesOnHand,
   useProducts,
   type Product,
   type QtyBasis,
@@ -68,16 +68,18 @@ function StockPage() {
     return term ? products.filter((p) => p.name.toLowerCase().includes(term)) : products;
   }, [products, search]);
 
-  const totals = useMemo(
-    () => ({
-      cases: products.reduce(
-        (sum, p) => sum + casesOnHand(p.quantity_on_hand, p.units_per_case),
-        0,
-      ),
-      value: products.reduce((sum, p) => sum + p.quantity_on_hand * p.cost_price, 0),
-    }),
-    [products],
-  );
+  const totals = useMemo(() => {
+    let cases = 0;
+    let looseUnits = 0;
+    let value = 0;
+    for (const p of products) {
+      const split = splitCasesOnHand(p.quantity_on_hand, p.units_per_case);
+      cases += split.cases;
+      looseUnits += split.remainder;
+      value += p.quantity_on_hand * p.cost_price;
+    }
+    return { cases, looseUnits, value };
+  }, [products]);
 
   const removeProduct = useMutation({
     mutationFn: async (id: string) => {
@@ -120,9 +122,9 @@ function StockPage() {
           <p className="tabular mt-1 font-mono text-xl font-semibold tracking-tight text-ink sm:text-2xl">
             {isLoading
               ? "—"
-              : totals.cases.toLocaleString("en-ZA", {
-                  maximumFractionDigits: 2,
-                })}
+              : totals.looseUnits > 0
+                ? `${totals.cases.toLocaleString("en-ZA")} cases + ${totals.looseUnits} units`
+                : `${totals.cases.toLocaleString("en-ZA")} cases`}
           </p>
         </div>
         <div className="px-3 py-3 sm:px-5 sm:py-4">
@@ -157,8 +159,8 @@ function StockPage() {
                     product.quantity_on_hand === 0 ? "text-destructive" : "text-ink"
                   }`}
                 >
-                  {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)} cases
-                  on hand
+                  {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)} on
+                  hand
                 </p>
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -822,13 +824,13 @@ function AddStockDialog({
                 {unitsToAdd === 1 ? "" : "s"} to on hand
                 {basis === "case"
                   ? ` (${amount} × ${product.units_per_case})`
-                  : ` · ≈ ${formatCasesOnHand(unitsToAdd, product.units_per_case)} cases`}
+                  : ` · ${formatCasesOnHand(unitsToAdd, product.units_per_case)}`}
               </p>
             ) : product ? (
               <p className="mt-1.5 text-sm text-soft">
                 Currently{" "}
-                {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)} cases on
-                hand · {product.units_per_case} per case
+                {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)} on hand
+                · {product.units_per_case} per case
               </p>
             ) : null}
           </div>
