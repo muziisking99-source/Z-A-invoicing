@@ -6,7 +6,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { ProductPicker } from "@/components/ProductPicker";
 import { money } from "@/lib/format";
-import { useProducts, type Product, type QtyBasis } from "@/lib/products";
+import {
+  casesOnHand,
+  formatCasesOnHand,
+  useProducts,
+  type Product,
+  type QtyBasis,
+} from "@/lib/products";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -64,7 +70,10 @@ function StockPage() {
 
   const totals = useMemo(
     () => ({
-      units: products.reduce((sum, p) => sum + p.quantity_on_hand, 0),
+      cases: products.reduce(
+        (sum, p) => sum + casesOnHand(p.quantity_on_hand, p.units_per_case),
+        0,
+      ),
       value: products.reduce((sum, p) => sum + p.quantity_on_hand * p.cost_price, 0),
     }),
     [products],
@@ -107,9 +116,13 @@ function StockPage() {
 
       <div className="panel mt-3 grid grid-cols-2 divide-x divide-line overflow-hidden rounded-xl">
         <div className="px-3 py-3 sm:px-5 sm:py-4">
-          <p className="text-xs font-medium text-soft sm:text-sm">Units on hand</p>
+          <p className="text-xs font-medium text-soft sm:text-sm">Cases on hand</p>
           <p className="tabular mt-1 font-mono text-xl font-semibold tracking-tight text-ink sm:text-2xl">
-            {isLoading ? "—" : totals.units.toLocaleString("en-ZA")}
+            {isLoading
+              ? "—"
+              : totals.cases.toLocaleString("en-ZA", {
+                  maximumFractionDigits: 2,
+                })}
           </p>
         </div>
         <div className="px-3 py-3 sm:px-5 sm:py-4">
@@ -144,31 +157,40 @@ function StockPage() {
                     product.quantity_on_hand === 0 ? "text-destructive" : "text-ink"
                   }`}
                 >
-                  {product.quantity_on_hand} units on hand
+                  {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)} cases
+                  on hand
                 </p>
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <dt className="text-soft">Cost</dt>
+                  <dt className="text-soft">cost price per unit</dt>
                   <dd className="font-medium tabular-nums">{money(product.cost_price)}</dd>
                 </div>
                 <div>
-                  <dt className="text-soft">Units per case</dt>
-                  <dd className="font-medium tabular-nums">{product.units_per_case}</dd>
+                  <dt className="text-soft">cost price per case</dt>
+                  <dd className="font-medium tabular-nums">
+                    {money(product.cost_price_per_case)}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-soft">Unit price</dt>
+                  <dt className="text-soft">selling price per unit</dt>
                   <dd className="font-medium tabular-nums">{money(product.selling_price)}</dd>
                 </div>
                 <div>
-                  <dt className="text-soft">Case price</dt>
+                  <dt className="text-soft">selling price per case</dt>
                   <dd className="font-medium tabular-nums">
                     {product.case_price > 0 ? money(product.case_price) : "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-soft">Units on hand</dt>
-                  <dd className="font-medium tabular-nums">{product.quantity_on_hand}</dd>
+                  <dt className="text-soft">units per case</dt>
+                  <dd className="font-medium tabular-nums">{product.units_per_case}</dd>
+                </div>
+                <div>
+                  <dt className="text-soft">cases on hand</dt>
+                  <dd className="font-medium tabular-nums">
+                    {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)}
+                  </dd>
                 </div>
                 <div className="col-span-2">
                   <dt className="text-soft">Value (cost)</dt>
@@ -203,15 +225,16 @@ function StockPage() {
 
       <section className="panel mt-3 hidden overflow-hidden rounded-xl md:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-base">
+          <table className="w-full min-w-[980px] border-collapse text-base">
             <thead>
               <tr className="sticky top-0 z-[1] border-b border-line bg-secondary text-left text-sm font-semibold uppercase tracking-wide text-soft">
                 <th className="px-5 py-3.5">Name</th>
-                <th className="px-5 py-3.5 text-right">Cost</th>
-                <th className="px-5 py-3.5 text-right">Unit</th>
-                <th className="px-5 py-3.5 text-right">Cases</th>
-                <th className="px-5 py-3.5 text-right">Units per case</th>
-                <th className="px-5 py-3.5 text-right">Units on hand</th>
+                <th className="px-5 py-3.5 text-right">Cost/unit</th>
+                <th className="px-5 py-3.5 text-right">Cost/case</th>
+                <th className="px-5 py-3.5 text-right">Sell/unit</th>
+                <th className="px-5 py-3.5 text-right">Sell/case</th>
+                <th className="px-5 py-3.5 text-right">Units/case</th>
+                <th className="px-5 py-3.5 text-right">Cases on hand</th>
                 <th className="px-5 py-3.5 text-right">Value</th>
                 <th className="px-5 py-3.5" />
               </tr>
@@ -220,14 +243,14 @@ function StockPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-line/80 last:border-0">
-                    <td className="px-5 py-4" colSpan={8}>
+                    <td className="px-5 py-4" colSpan={9}>
                       <div className="skeleton-bar h-5 w-full max-w-xl" />
                     </td>
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-14 text-center text-soft">
+                  <td colSpan={9} className="px-5 py-14 text-center text-soft">
                     {products.length === 0
                       ? "No products yet — add your first one."
                       : "No products match that search."}
@@ -244,6 +267,9 @@ function StockPage() {
                     <td className="px-5 py-4 text-right font-mono text-[15px] text-soft">
                       {money(product.cost_price)}
                     </td>
+                    <td className="px-5 py-4 text-right font-mono text-[15px] text-soft">
+                      {money(product.cost_price_per_case)}
+                    </td>
                     <td className="px-5 py-4 text-right font-mono text-[15px]">
                       {money(product.selling_price)}
                     </td>
@@ -258,7 +284,7 @@ function StockPage() {
                         product.quantity_on_hand === 0 ? "text-destructive" : ""
                       }`}
                     >
-                      {product.quantity_on_hand}
+                      {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)}
                     </td>
                     <td className="px-5 py-4 text-right font-mono text-[15px] font-semibold text-ink">
                       {money(product.quantity_on_hand * product.cost_price)}
@@ -339,6 +365,7 @@ function AddProductDialog({
 }) {
   const [name, setName] = useState("");
   const [cost, setCost] = useState("");
+  const [costCase, setCostCase] = useState("");
   const [sell, setSell] = useState("");
   const [casePrice, setCasePrice] = useState("");
   const [pack, setPack] = useState("1");
@@ -352,6 +379,7 @@ function AddProductDialog({
       const { error } = await supabase.from("products").insert({
         name: name.trim(),
         cost_price: Number(cost || 0),
+        cost_price_per_case: Number(costCase || 0),
         selling_price: Number(sell || 0),
         case_price: Number(casePrice || 0),
         units_per_case: unitsPerCase,
@@ -362,6 +390,7 @@ function AddProductDialog({
       toast.success("Product added");
       setName("");
       setCost("");
+      setCostCase("");
       setSell("");
       setCasePrice("");
       setPack("1");
@@ -403,7 +432,7 @@ function AddProductDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClass} htmlFor="p-cost">
-                Cost price
+                cost price per unit
               </label>
               <input
                 id="p-cost"
@@ -416,22 +445,22 @@ function AddProductDialog({
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="p-pack">
-                Units per case
+              <label className={labelClass} htmlFor="p-cost-case">
+                cost price per case
               </label>
               <input
-                id="p-pack"
+                id="p-cost-case"
                 type="number"
-                min="1"
-                step="1"
-                value={pack}
-                onChange={(e) => setPack(e.target.value)}
+                min="0"
+                step="0.01"
+                value={costCase}
+                onChange={(e) => setCostCase(e.target.value)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
             <div>
               <label className={labelClass} htmlFor="p-sell">
-                Unit price
+                selling price per unit
               </label>
               <input
                 id="p-sell"
@@ -445,7 +474,7 @@ function AddProductDialog({
             </div>
             <div>
               <label className={labelClass} htmlFor="p-case">
-                Case price
+                selling price per case
               </label>
               <input
                 id="p-case"
@@ -454,6 +483,20 @@ function AddProductDialog({
                 step="0.01"
                 value={casePrice}
                 onChange={(e) => setCasePrice(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className={labelClass} htmlFor="p-pack">
+                units per case
+              </label>
+              <input
+                id="p-pack"
+                type="number"
+                min="1"
+                step="1"
+                value={pack}
+                onChange={(e) => setPack(e.target.value)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -480,6 +523,7 @@ function EditProductDialog({
 }) {
   const [name, setName] = useState("");
   const [cost, setCost] = useState("");
+  const [costCase, setCostCase] = useState("");
   const [sell, setSell] = useState("");
   const [casePrice, setCasePrice] = useState("");
   const [pack, setPack] = useState("1");
@@ -489,6 +533,7 @@ function EditProductDialog({
     setLoadedId(product.id);
     setName(product.name);
     setCost(String(product.cost_price));
+    setCostCase(String(product.cost_price_per_case ?? 0));
     setSell(String(product.selling_price));
     setCasePrice(String(product.case_price ?? 0));
     setPack(String(product.units_per_case ?? 1));
@@ -505,6 +550,7 @@ function EditProductDialog({
         .update({
           name: name.trim(),
           cost_price: Number(cost || 0),
+          cost_price_per_case: Number(costCase || 0),
           selling_price: Number(sell || 0),
           case_price: Number(casePrice || 0),
           units_per_case: unitsPerCase,
@@ -552,7 +598,7 @@ function EditProductDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClass} htmlFor="e-cost">
-                Cost price
+                cost price per unit
               </label>
               <input
                 id="e-cost"
@@ -565,22 +611,22 @@ function EditProductDialog({
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="e-pack">
-                Units per case
+              <label className={labelClass} htmlFor="e-cost-case">
+                cost price per case
               </label>
               <input
-                id="e-pack"
+                id="e-cost-case"
                 type="number"
-                min="1"
-                step="1"
-                value={pack}
-                onChange={(e) => setPack(e.target.value)}
+                min="0"
+                step="0.01"
+                value={costCase}
+                onChange={(e) => setCostCase(e.target.value)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
             <div>
               <label className={labelClass} htmlFor="e-sell">
-                Unit price
+                selling price per unit
               </label>
               <input
                 id="e-sell"
@@ -594,7 +640,7 @@ function EditProductDialog({
             </div>
             <div>
               <label className={labelClass} htmlFor="e-case">
-                Case price
+                selling price per case
               </label>
               <input
                 id="e-case"
@@ -603,6 +649,20 @@ function EditProductDialog({
                 step="0.01"
                 value={casePrice}
                 onChange={(e) => setCasePrice(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className={labelClass} htmlFor="e-pack">
+                units per case
+              </label>
+              <input
+                id="e-pack"
+                type="number"
+                min="1"
+                step="1"
+                value={pack}
+                onChange={(e) => setPack(e.target.value)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -760,12 +820,15 @@ function AddStockDialog({
               <p className="mt-2 rounded-lg bg-accent/50 px-3 py-2 text-sm font-medium text-accent-ink">
                 Adds {unitsToAdd.toLocaleString("en-ZA")} unit
                 {unitsToAdd === 1 ? "" : "s"} to on hand
-                {basis === "case" ? ` (${amount} × ${product.units_per_case})` : ""}
+                {basis === "case"
+                  ? ` (${amount} × ${product.units_per_case})`
+                  : ` · ≈ ${formatCasesOnHand(unitsToAdd, product.units_per_case)} cases`}
               </p>
             ) : product ? (
               <p className="mt-1.5 text-sm text-soft">
-                Currently {product.quantity_on_hand.toLocaleString("en-ZA")} on hand ·{" "}
-                {product.units_per_case} per case
+                Currently{" "}
+                {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)} cases on
+                hand · {product.units_per_case} per case
               </p>
             ) : null}
           </div>

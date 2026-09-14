@@ -7,6 +7,7 @@ import { AppShell, PageHeader } from "@/components/AppShell";
 import { money } from "@/lib/format";
 import { downloadInvoicePdf, type InvoicePdfData } from "@/lib/invoice-pdf";
 import {
+  lineAmount,
   qtyBasisLabel,
   unitsForLine,
   useProducts,
@@ -124,9 +125,9 @@ function NewInvoicePage() {
     const unitsMoved = product
       ? unitsForLine(quantity, line.qtyBasis, product.units_per_case)
       : 0;
-    // Charge is always the entered price (unit, case, or manual) × entered qty:
-    // e.g. 3 cases at case price = case_price × 3.
-    const billableQty = quantity;
+    const amount = product
+      ? lineAmount(quantity, line.qtyBasis, priceBasis, charge, product.units_per_case)
+      : 0;
     const demanded = product ? (demandByProduct.get(product.id) ?? 0) : 0;
     const shortfall = !!product && demanded > product.quantity_on_hand;
     return {
@@ -137,8 +138,7 @@ function NewInvoicePage() {
       canUseCase,
       charge,
       unitsMoved,
-      billableQty,
-      amount: billableQty * charge,
+      amount,
       shortfall,
       demanded,
     };
@@ -543,9 +543,11 @@ function NewInvoicePage() {
                         </div>
                         {row.product && row.quantity > 0 && row.charge > 0 ? (
                           <p className="mt-1 text-right text-xs text-soft">
-                            {row.line.qtyBasis === "case"
-                              ? `${row.quantity} cases × ${row.product.units_per_case} = ${row.unitsMoved} units × ${money(row.charge)}`
-                              : `${row.quantity} × ${money(row.charge)}`}
+                            {row.line.qtyBasis === "case" && row.priceBasis === "unit"
+                              ? `${row.quantity} cases × ${row.product.units_per_case} units × ${money(row.charge)}`
+                              : row.line.qtyBasis === "case"
+                                ? `${row.quantity} cases × ${money(row.charge)}`
+                                : `${row.quantity} × ${money(row.charge)}`}
                           </p>
                         ) : null}
                       </div>

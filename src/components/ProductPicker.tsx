@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { money } from "@/lib/format";
-import type { Product } from "@/lib/products";
+import { formatCasesOnHand, type Product } from "@/lib/products";
 import { cn } from "@/lib/utils";
 
 type ProductPickerProps = {
@@ -104,7 +104,8 @@ function ProductMeta({
         </span>
       ) : (
         <span className={cn(chip, muted)}>
-          {product.quantity_on_hand.toLocaleString("en-ZA")} units on hand
+          {formatCasesOnHand(product.quantity_on_hand, product.units_per_case)}{" "}
+          cases on hand
         </span>
       )}
     </span>

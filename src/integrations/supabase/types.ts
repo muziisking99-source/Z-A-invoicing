@@ -105,6 +105,7 @@ export type Database = {
         Row: {
           case_price: number
           cost_price: number
+          cost_price_per_case: number
           created_at: string
           id: string
           name: string
@@ -116,6 +117,7 @@ export type Database = {
         Insert: {
           case_price?: number
           cost_price?: number
+          cost_price_per_case?: number
           created_at?: string
           id?: string
           name: string
@@ -127,6 +129,7 @@ export type Database = {
         Update: {
           case_price?: number
           cost_price?: number
+          cost_price_per_case?: number
           created_at?: string
           id?: string
           name?: string

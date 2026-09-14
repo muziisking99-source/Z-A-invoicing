@@ -8,8 +8,6 @@ import { money, shortDate } from "@/lib/format";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 import {
   chargedLinePrice,
-  priceBasisLabel,
-  unitsForLine,
   type PriceBasis,
   type QtyBasis,
 } from "@/lib/products";
@@ -345,30 +343,10 @@ function HistoryPage() {
                         </td>
                       </tr>
                     ) : (
-                      items.map((item) => {
-                        const unitsMoved = unitsForLine(
-                          item.quantity,
-                          item.qty_basis,
-                          item.units_per_case,
-                        );
-                        return (
+                      items.map((item) => (
                         <tr key={item.id} className="border-b border-line/60 last:border-0">
                           <td className="px-3 py-2.5 font-medium sm:px-4 sm:py-3">
-                            <span>{item.product_name}</span>
-                            <span className="mt-0.5 block text-xs font-normal text-soft">
-                              {item.quantity}{" "}
-                              {item.qty_basis === "case"
-                                ? item.quantity === 1
-                                  ? "case"
-                                  : "cases"
-                                : item.quantity === 1
-                                  ? "unit"
-                                  : "units"}{" "}
-                              · {priceBasisLabel(item.price_basis)} price
-                              {item.qty_basis === "case"
-                                ? ` · ${unitsMoved} units`
-                                : ""}
-                            </span>
+                            {item.product_name}
                           </td>
                           <td className="tabular px-3 py-2.5 text-right font-mono sm:px-4 sm:py-3">
                             {item.quantity}
@@ -380,8 +358,7 @@ function HistoryPage() {
                             {money(item.line_total)}
                           </td>
                         </tr>
-                        );
-                      })
+                      ))
                     )}
                   </tbody>
                 </table>
