@@ -529,6 +529,7 @@ function EditProductDialog({
   const [sell, setSell] = useState("");
   const [casePrice, setCasePrice] = useState("");
   const [pack, setPack] = useState("1");
+  const [onHand, setOnHand] = useState("");
   const [loadedId, setLoadedId] = useState<string | null>(null);
 
   if (product && product.id !== loadedId) {
@@ -539,13 +540,20 @@ function EditProductDialog({
     setSell(String(product.selling_price));
     setCasePrice(String(product.case_price ?? 0));
     setPack(String(product.units_per_case ?? 1));
+    setOnHand(String(product.quantity_on_hand));
   }
+
+  const unitsPerCase = Math.max(1, Math.floor(Number(pack)) || 1);
+  const unitsOnHand = Number(onHand);
+  const onHandValid = Number.isInteger(unitsOnHand) && unitsOnHand >= 0;
 
   const save = useMutation({
     mutationFn: async () => {
-      const unitsPerCase = Number(pack);
       if (!Number.isInteger(unitsPerCase) || unitsPerCase < 1) {
         throw new Error("Units per case must be a whole number of at least 1");
+      }
+      if (!onHandValid) {
+        throw new Error("Stock quantity must be a whole number of 0 or more");
       }
       const { error } = await supabase
         .from("products")
@@ -556,6 +564,7 @@ function EditProductDialog({
           selling_price: Number(sell || 0),
           case_price: Number(casePrice || 0),
           units_per_case: unitsPerCase,
+          quantity_on_hand: unitsOnHand,
         })
         .eq("id", product!.id);
       if (error) throw error;
@@ -573,7 +582,7 @@ function EditProductDialog({
       <DialogContent className="panel rounded-xl">
         <DialogHeader>
           <DialogTitle className="font-display">Edit product</DialogTitle>
-          <DialogDescription>Use “Add stock” to change quantity on hand.</DialogDescription>
+          <DialogDescription>Update prices, pack size, and stock on hand.</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -654,7 +663,7 @@ function EditProductDialog({
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
-            <div className="col-span-2">
+            <div>
               <label className={labelClass} htmlFor="e-pack">
                 units per case
               </label>
@@ -668,7 +677,30 @@ function EditProductDialog({
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
+            <div>
+              <label className={labelClass} htmlFor="e-on-hand">
+                units on hand
+              </label>
+              <input
+                id="e-on-hand"
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                value={onHand}
+                onChange={(e) => setOnHand(e.target.value)}
+                className={`${fieldClass} tabular font-mono`}
+              />
+            </div>
           </div>
+          {onHandValid ? (
+            <p className="text-sm text-soft">
+              {formatCasesOnHand(unitsOnHand, unitsPerCase)} on hand
+            </p>
+          ) : (
+            <p className="text-sm text-soft">Enter a whole number of 0 or more units.</p>
+          )}
+
           <DialogFooter>
             <button type="submit" className={primaryBtn} disabled={save.isPending}>
               Save changes
