@@ -211,9 +211,9 @@ export async function downloadInvoicePdf(invoice: InvoicePdfData) {
 
   const bankRows: [string, string][] = [
     ["Account holder", "Sweet for you"],
-    ["Bank", "Capitec business"],
+    ["Bank", "Capitec Bank"],
     ["Account number", "2572387049"],
-    ["Account type", "Business account"],
+    ["Account type", "Current"],
     ["Reference", "Store name"],
   ];
 

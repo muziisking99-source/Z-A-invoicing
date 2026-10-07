@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -118,6 +118,7 @@ function useInvoiceItems(invoiceId: string | null) {
 }
 
 function HistoryPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: invoices = [], isLoading } = useInvoices();
   const [selected, setSelected] = useState<Invoice | null>(null);
@@ -141,6 +142,11 @@ function HistoryPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const openEdit = (invoice: Invoice) => {
+    setSelected(null);
+    navigate({ to: "/new-invoice", search: { edit: invoice.id } });
+  };
 
   const handlePdf = async (invoice: Invoice, lineItems: InvoiceItem[]) => {
     try {
@@ -210,13 +216,20 @@ function HistoryPage() {
                   </p>
                 </div>
               </button>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setSelected(invoice)}
                   className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
                 >
                   View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openEdit(invoice)}
+                  className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
+                >
+                  Edit
                 </button>
                 <button
                   type="button"
@@ -288,6 +301,13 @@ function HistoryPage() {
                           className="btn-press rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-secondary"
                         >
                           View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(invoice)}
+                          className="btn-press rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-secondary"
+                        >
+                          Edit
                         </button>
                         <button
                           type="button"
@@ -390,6 +410,13 @@ function HistoryPage() {
                   </p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(selected)}
+                    className={ghostBtn}
+                  >
+                    Edit
+                  </button>
                   <button
                     type="button"
                     onClick={() => setDeleting(selected)}

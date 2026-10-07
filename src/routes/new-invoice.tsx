@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
@@ -26,7 +26,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+type InvoiceSearch = {
+  edit?: string;
+};
+
 export const Route = createFileRoute("/new-invoice")({
+  validateSearch: (search: Record<string, unknown>): InvoiceSearch => {
+    const edit = search["edit"];
+    if (typeof edit === "string" && edit.length > 0) return { edit };
+    return {};
+  },
   head: () => ({
     meta: [
       { title: "New Invoice · Sweet for You Salvage" },
@@ -73,17 +82,145 @@ const primaryBtn =
 const ghostBtn =
   "btn-press w-full rounded-lg border border-line bg-paper px-5 py-3 text-base font-medium text-ink hover:bg-secondary sm:w-auto";
 
+type EditItem = {
+  id: string;
+  product_id: string | null;
+  quantity: number;
+  unit_price: number;
+  case_price: number;
+  price_basis: PriceBasis;
+  qty_basis: QtyBasis;
+  units_per_case: number;
+};
+
+type EditInvoice = {
+  id: string;
+  invoice_number: string;
+  customer_name: string;
+  delivery_cost: number;
+  created_at: string;
+  items: EditItem[];
+};
+
+function lineFromSavedItem(item: EditItem, product: Product | undefined): Line {
+  const stored = item.price_basis === "case" ? item.case_price : item.unit_price;
+  let priceBasis = item.price_basis;
+  let manualPrice = priceBasis === "manual" ? String(stored) : "";
+  if (product && priceBasis !== "manual") {
+    const live = priceBasis === "case" ? product.case_price : product.selling_price;
+    if (priceBasis === "case" && live <= 0) {
+      priceBasis = "manual";
+      manualPrice = String(stored);
+    } else if (Math.abs(live - stored) > 0.009) {
+      priceBasis = "manual";
+      manualPrice = String(stored);
+    }
+  }
+  return {
+    key: item.id,
+    productId: product && item.product_id ? item.product_id : "",
+    quantity: String(item.quantity),
+    qtyBasis: item.qty_basis,
+    priceBasis,
+    manualPrice,
+  };
+}
+
 function NewInvoicePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: products = [] } = useProducts();
+  const { edit: editId } = Route.useSearch();
+  const { data: products = [], isSuccess: productsReady } = useProducts();
   const [customer, setCustomer] = useState("");
   const [delivery, setDelivery] = useState("");
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [savedPdf, setSavedPdf] = useState<InvoicePdfData | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [hydratedId, setHydratedId] = useState<string | null>(null);
+  const [warnMissingProduct, setWarnMissingProduct] = useState(false);
+
+  const editQuery = useQuery({
+    queryKey: ["invoice-edit", editId],
+    enabled: !!editId,
+    queryFn: async (): Promise<EditInvoice> => {
+      const { data: invoice, error } = await supabase
+        .from("invoices")
+        .select("id, invoice_number, customer_name, delivery_cost, created_at")
+        .eq("id", editId!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!invoice) throw new Error("Invoice not found");
+
+      const { data: items, error: itemsError } = await supabase
+        .from("invoice_items")
+        .select(
+          "id, product_id, quantity, unit_price, case_price, price_basis, qty_basis, units_per_case",
+        )
+        .eq("invoice_id", editId!)
+        .order("created_at", { ascending: true });
+      if (itemsError) throw itemsError;
+
+      return {
+        id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        customer_name: invoice.customer_name,
+        delivery_cost: Number(invoice.delivery_cost ?? 0),
+        created_at: invoice.created_at,
+        items: (items ?? []).map((row) => ({
+          id: row.id,
+          product_id: row.product_id,
+          quantity: row.quantity,
+          unit_price: Number(row.unit_price),
+          case_price: Number(row.case_price ?? 0),
+          price_basis: (row.price_basis === "case"
+            ? "case"
+            : row.price_basis === "manual"
+              ? "manual"
+              : "unit") as PriceBasis,
+          qty_basis: (row.qty_basis === "case" ? "case" : "unit") as QtyBasis,
+          units_per_case: Math.max(1, Number(row.units_per_case ?? 1) || 1),
+        })),
+      };
+    },
+  });
+
+  const editing = editQuery.data;
+  if (editing && productsReady && hydratedId !== editing.id) {
+    const byProduct = new Map(products.map((product) => [product.id, product]));
+    const missing = editing.items.some(
+      (item) => item.product_id && !byProduct.has(item.product_id),
+    );
+    setHydratedId(editing.id);
+    setCustomer(editing.customer_name);
+    setDelivery(editing.delivery_cost > 0 ? String(editing.delivery_cost) : "");
+    setLines(
+      editing.items.length > 0
+        ? editing.items.map((item) =>
+            lineFromSavedItem(item, item.product_id ? byProduct.get(item.product_id) : undefined),
+          )
+        : [newLine()],
+    );
+    setWarnMissingProduct(missing);
+  }
+
+  useEffect(() => {
+    if (!warnMissingProduct) return;
+    toast.error("A product on this invoice was removed. Pick it again before saving.");
+    setWarnMissingProduct(false);
+  }, [warnMissingProduct]);
 
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  const stockCredit = useMemo(() => {
+    const credit = new Map<string, number>();
+    if (!editing || hydratedId !== editing.id) return credit;
+    for (const item of editing.items) {
+      if (!item.product_id) continue;
+      const units = unitsForLine(item.quantity, item.qty_basis, item.units_per_case);
+      credit.set(item.product_id, (credit.get(item.product_id) ?? 0) + units);
+    }
+    return credit;
+  }, [editing, hydratedId]);
 
   const demandByProduct = useMemo(() => {
     const demand = new Map<string, number>();
@@ -127,7 +264,10 @@ function NewInvoicePage() {
       : 0;
     const amount = product ? lineAmount(quantity, charge) : 0;
     const demanded = product ? (demandByProduct.get(product.id) ?? 0) : 0;
-    const shortfall = !!product && demanded > product.quantity_on_hand;
+    const available = product
+      ? product.quantity_on_hand + (stockCredit.get(product.id) ?? 0)
+      : 0;
+    const shortfall = !!product && demanded > available;
     return {
       line,
       product,
@@ -139,6 +279,7 @@ function NewInvoicePage() {
       amount,
       shortfall,
       demanded,
+      available,
     };
   });
 
@@ -183,7 +324,7 @@ function NewInvoicePage() {
         })),
       };
 
-      const { data, error } = await supabase.rpc("create_invoice", {
+      const payload = {
         p_customer_name: snapshot.customer_name,
         p_items: filledLines.map((row) => ({
           product_id: row.product!.id,
@@ -193,7 +334,13 @@ function NewInvoicePage() {
           ...(row.priceBasis === "manual" ? { unit_price: row.charge } : {}),
         })),
         p_delivery_cost: deliveryCost,
-      });
+      };
+      const { data, error } = editId
+        ? await supabase.rpc("update_invoice", {
+            p_invoice_id: editId,
+            ...payload,
+          })
+        : await supabase.rpc("create_invoice", payload);
       if (error) throw error;
       const invoice = data as {
         invoice_number: string;
@@ -212,13 +359,19 @@ function NewInvoicePage() {
       } satisfies InvoicePdfData;
     },
     onSuccess: (pdfData) => {
-      toast.success(`Invoice ${pdfData.invoice_number} saved`);
+      toast.success(
+        editId ? `Invoice ${pdfData.invoice_number} updated` : `Invoice ${pdfData.invoice_number} saved`,
+      );
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-items"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-edit", editId] });
       setSavedPdf(pdfData);
-      setCustomer("");
-      setDelivery("");
-      setLines([newLine()]);
+      if (!editId) {
+        setCustomer("");
+        setDelivery("");
+        setLines([newLine()]);
+      }
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -242,7 +395,7 @@ function NewInvoicePage() {
     const short = resolved.find((row) => row.shortfall);
     if (short) {
       toast.error(
-        `Not enough stock for ${short.product!.name}: only ${short.product!.quantity_on_hand} available (need ${short.demanded})`,
+        `Not enough stock for ${short.product!.name}: only ${short.available} available (need ${short.demanded})`,
       );
       return;
     }
@@ -268,8 +421,23 @@ function NewInvoicePage() {
 
   return (
     <AppShell>
-      <PageHeader eyebrow="Invoicing" title="New invoice" />
+      <PageHeader
+        eyebrow="Invoicing"
+        title={editing ? `Edit ${editing.invoice_number}` : "New invoice"}
+      />
 
+      {editId && !editQuery.isError && hydratedId !== editId ? (
+        <div className="panel mt-3 rounded-xl px-4 py-10 text-center text-soft">
+          Loading invoice…
+        </div>
+      ) : null}
+      {editId && editQuery.isError ? (
+        <div className="panel mt-3 rounded-xl px-4 py-10 text-center text-soft">
+          {editQuery.error instanceof Error ? editQuery.error.message : "Could not load invoice"}
+        </div>
+      ) : null}
+
+      {!editId || (editQuery.isSuccess && hydratedId === editId) ? (
       <section className="mt-3 grid gap-3 sm:gap-4 lg:grid-cols-12">
         <div className="panel rounded-xl p-4 sm:p-6 lg:col-span-7">
           <div>
@@ -552,7 +720,7 @@ function NewInvoicePage() {
 
                   {row.shortfall ? (
                     <p className="mt-3 text-sm font-medium text-destructive">
-                      Only {row.product!.quantity_on_hand} of {row.product!.name} available
+                      Only {row.available} of {row.product!.name} available
                       {row.demanded > row.unitsMoved
                         ? ` (lines need ${row.demanded} units)`
                         : ""}
@@ -621,10 +789,11 @@ function NewInvoicePage() {
             disabled={save.isPending}
             className="btn-press mt-5 w-full rounded-lg bg-primary py-3.5 text-base font-semibold text-primary-foreground disabled:opacity-60 sm:mt-6"
           >
-            {save.isPending ? "Saving…" : "Save invoice"}
+            {save.isPending ? "Saving…" : editing ? "Save changes" : "Save invoice"}
           </button>
         </div>
       </section>
+      ) : null}
 
       <Dialog open={!!savedPdf} onOpenChange={(open) => !open && closeSavedDialog(false)}>
         <DialogContent className="panel max-w-md rounded-xl border-line sm:rounded-xl">
@@ -632,7 +801,7 @@ function NewInvoicePage() {
             <>
               <DialogHeader>
                 <DialogTitle className="font-display text-xl sm:text-2xl">
-                  Invoice saved
+                  {editing ? "Invoice updated" : "Invoice saved"}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-soft sm:text-base">
                   {savedPdf.invoice_number} for {savedPdf.customer_name} ·{" "}

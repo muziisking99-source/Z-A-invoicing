@@ -167,6 +167,28 @@ export type Database = {
         }
       }
       delete_invoice: { Args: { p_invoice_id: string }; Returns: undefined }
+      update_invoice: {
+        Args: {
+          p_customer_name: string
+          p_delivery_cost?: number
+          p_invoice_id: string
+          p_items: Json
+        }
+        Returns: {
+          created_at: string
+          customer_name: string
+          delivery_cost: number
+          id: string
+          invoice_number: string
+          total: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invoices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       [_ in never]: never
