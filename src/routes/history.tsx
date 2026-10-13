@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { money, shortDate } from "@/lib/format";
-import { downloadInvoicePdf } from "@/lib/invoice-pdf";
+import { downloadDeliveryNotePdf, downloadInvoicePdf } from "@/lib/invoice-pdf";
 import {
   chargedLinePrice,
   type PriceBasis,
@@ -87,33 +87,51 @@ function useInvoices() {
   });
 }
 
+function mapInvoiceItems(
+  rows: {
+    id: string;
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    case_price: number | null;
+    price_basis: string;
+    qty_basis: string;
+    units_per_case: number | null;
+    line_total: number;
+  }[],
+): InvoiceItem[] {
+  return rows.map((row) => ({
+    ...row,
+    unit_price: Number(row.unit_price),
+    case_price: Number(row.case_price ?? 0),
+    price_basis: (row.price_basis === "case"
+      ? "case"
+      : row.price_basis === "manual"
+        ? "manual"
+        : "unit") as PriceBasis,
+    qty_basis: (row.qty_basis === "case" ? "case" : "unit") as QtyBasis,
+    units_per_case: Math.max(1, Number(row.units_per_case ?? 1) || 1),
+    line_total: Number(row.line_total),
+  }));
+}
+
+async function fetchInvoiceItems(invoiceId: string): Promise<InvoiceItem[]> {
+  const { data, error } = await supabase
+    .from("invoice_items")
+    .select(
+      "id, product_name, quantity, unit_price, case_price, price_basis, qty_basis, units_per_case, line_total",
+    )
+    .eq("invoice_id", invoiceId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return mapInvoiceItems(data ?? []);
+}
+
 function useInvoiceItems(invoiceId: string | null) {
   return useQuery({
     queryKey: ["invoice-items", invoiceId],
     enabled: !!invoiceId,
-    queryFn: async (): Promise<InvoiceItem[]> => {
-      const { data, error } = await supabase
-        .from("invoice_items")
-        .select(
-          "id, product_name, quantity, unit_price, case_price, price_basis, qty_basis, units_per_case, line_total",
-        )
-        .eq("invoice_id", invoiceId!)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []).map((row) => ({
-        ...row,
-        unit_price: Number(row.unit_price),
-        case_price: Number(row.case_price ?? 0),
-        price_basis: (row.price_basis === "case"
-          ? "case"
-          : row.price_basis === "manual"
-            ? "manual"
-            : "unit") as PriceBasis,
-        qty_basis: (row.qty_basis === "case" ? "case" : "unit") as QtyBasis,
-        units_per_case: Math.max(1, Number(row.units_per_case ?? 1) || 1),
-        line_total: Number(row.line_total),
-      })) as InvoiceItem[];
-    },
+    queryFn: () => fetchInvoiceItems(invoiceId!),
   });
 }
 
@@ -148,25 +166,40 @@ function HistoryPage() {
     navigate({ to: "/new-invoice", search: { edit: invoice.id } });
   };
 
+  const pdfData = (invoice: Invoice, lineItems: InvoiceItem[]) => ({
+    invoice_number: invoice.invoice_number,
+    customer_name: invoice.customer_name,
+    created_at: invoice.created_at,
+    total: invoice.total,
+    delivery_cost: invoice.delivery_cost,
+    items: lineItems.map((item) => ({
+      product_name: item.product_name,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      case_price: item.case_price,
+      price_basis: item.price_basis,
+      qty_basis: item.qty_basis,
+      units_per_case: item.units_per_case,
+      line_total: item.line_total,
+    })),
+  });
+
   const handlePdf = async (invoice: Invoice, lineItems: InvoiceItem[]) => {
     try {
-      await downloadInvoicePdf({
-        invoice_number: invoice.invoice_number,
-        customer_name: invoice.customer_name,
-        created_at: invoice.created_at,
-        total: invoice.total,
-        delivery_cost: invoice.delivery_cost,
-        items: lineItems.map((item) => ({
-          product_name: item.product_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          case_price: item.case_price,
-          price_basis: item.price_basis,
-          qty_basis: item.qty_basis,
-          units_per_case: item.units_per_case,
-          line_total: item.line_total,
-        })),
-      });
+      await downloadInvoicePdf(pdfData(invoice, lineItems));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create PDF");
+    }
+  };
+
+  const handleDeliveryNote = async (invoice: Invoice, lineItems?: InvoiceItem[]) => {
+    try {
+      const rows = lineItems ?? (await fetchInvoiceItems(invoice.id));
+      if (rows.length === 0) {
+        toast.error("This invoice has no line items");
+        return;
+      }
+      await downloadDeliveryNotePdf(pdfData(invoice, rows));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not create PDF");
     }
@@ -216,7 +249,7 @@ function HistoryPage() {
                   </p>
                 </div>
               </button>
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setSelected(invoice)}
@@ -230,6 +263,13 @@ function HistoryPage() {
                   className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
                 >
                   Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeliveryNote(invoice)}
+                  className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
+                >
+                  Delivery note
                 </button>
                 <button
                   type="button"
@@ -308,6 +348,13 @@ function HistoryPage() {
                           className="btn-press rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-secondary"
                         >
                           Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeliveryNote(invoice)}
+                          className="btn-press rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-secondary"
+                        >
+                          Delivery note
                         </button>
                         <button
                           type="button"
@@ -416,6 +463,14 @@ function HistoryPage() {
                     className={ghostBtn}
                   >
                     Edit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={itemsLoading || items.length === 0}
+                    onClick={() => handleDeliveryNote(selected, items)}
+                    className={ghostBtn}
+                  >
+                    Delivery note
                   </button>
                   <button
                     type="button"
