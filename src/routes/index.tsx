@@ -13,6 +13,7 @@ import {
   type Product,
   type QtyBasis,
 } from "@/lib/products";
+import { useUnitCaseFields } from "@/lib/unit-case-price";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -366,11 +367,9 @@ function AddProductDialog({
   onSaved: () => void;
 }) {
   const [name, setName] = useState("");
-  const [cost, setCost] = useState("");
-  const [costCase, setCostCase] = useState("");
-  const [sell, setSell] = useState("");
-  const [casePrice, setCasePrice] = useState("");
   const [pack, setPack] = useState("1");
+  const costFields = useUnitCaseFields();
+  const sellFields = useUnitCaseFields();
 
   const save = useMutation({
     mutationFn: async () => {
@@ -378,12 +377,14 @@ function AddProductDialog({
       if (!Number.isInteger(unitsPerCase) || unitsPerCase < 1) {
         throw new Error("Units per case must be a whole number of at least 1");
       }
+      const cost = costFields.resolved(pack);
+      const sell = sellFields.resolved(pack);
       const { error } = await supabase.from("products").insert({
         name: name.trim(),
-        cost_price: Number(cost || 0),
-        cost_price_per_case: Number(costCase || 0),
-        selling_price: Number(sell || 0),
-        case_price: Number(casePrice || 0),
+        cost_price: cost.unit,
+        cost_price_per_case: cost.casePrice,
+        selling_price: sell.unit,
+        case_price: sell.casePrice,
         units_per_case: unitsPerCase,
       });
       if (error) throw error;
@@ -391,11 +392,9 @@ function AddProductDialog({
     onSuccess: () => {
       toast.success("Product added");
       setName("");
-      setCost("");
-      setCostCase("");
-      setSell("");
-      setCasePrice("");
       setPack("1");
+      costFields.reset();
+      sellFields.reset();
       onOpenChange(false);
       onSaved();
     },
@@ -407,7 +406,10 @@ function AddProductDialog({
       <DialogContent className="panel rounded-xl">
         <DialogHeader>
           <DialogTitle className="font-display">Add product</DialogTitle>
-          <DialogDescription>New products start with zero on hand.</DialogDescription>
+          <DialogDescription>
+            New products start with zero on hand. Leave unit or case blank to auto-fill from the
+            other × units per case.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -441,8 +443,8 @@ function AddProductDialog({
                 type="number"
                 min="0"
                 step="0.01"
-                value={cost}
-                onChange={(e) => setCost(e.target.value)}
+                value={costFields.unit}
+                onChange={(e) => costFields.onUnitChange(e.target.value, pack)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -455,8 +457,8 @@ function AddProductDialog({
                 type="number"
                 min="0"
                 step="0.01"
-                value={costCase}
-                onChange={(e) => setCostCase(e.target.value)}
+                value={costFields.casePrice}
+                onChange={(e) => costFields.onCaseChange(e.target.value, pack)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -469,8 +471,8 @@ function AddProductDialog({
                 type="number"
                 min="0"
                 step="0.01"
-                value={sell}
-                onChange={(e) => setSell(e.target.value)}
+                value={sellFields.unit}
+                onChange={(e) => sellFields.onUnitChange(e.target.value, pack)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -483,8 +485,8 @@ function AddProductDialog({
                 type="number"
                 min="0"
                 step="0.01"
-                value={casePrice}
-                onChange={(e) => setCasePrice(e.target.value)}
+                value={sellFields.casePrice}
+                onChange={(e) => sellFields.onCaseChange(e.target.value, pack)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -498,7 +500,12 @@ function AddProductDialog({
                 min="1"
                 step="1"
                 value={pack}
-                onChange={(e) => setPack(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPack(next);
+                  costFields.onPackChange(next);
+                  sellFields.onPackChange(next);
+                }}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -524,23 +531,25 @@ function EditProductDialog({
   onSaved: () => void;
 }) {
   const [name, setName] = useState("");
-  const [cost, setCost] = useState("");
-  const [costCase, setCostCase] = useState("");
-  const [sell, setSell] = useState("");
-  const [casePrice, setCasePrice] = useState("");
   const [pack, setPack] = useState("1");
   const [onHand, setOnHand] = useState("");
   const [loadedId, setLoadedId] = useState<string | null>(null);
+  const costFields = useUnitCaseFields();
+  const sellFields = useUnitCaseFields();
 
   if (product && product.id !== loadedId) {
     setLoadedId(product.id);
     setName(product.name);
-    setCost(String(product.cost_price));
-    setCostCase(String(product.cost_price_per_case ?? 0));
-    setSell(String(product.selling_price));
-    setCasePrice(String(product.case_price ?? 0));
     setPack(String(product.units_per_case ?? 1));
     setOnHand(String(product.quantity_on_hand));
+    costFields.reset(
+      product.cost_price > 0 ? String(product.cost_price) : "",
+      (product.cost_price_per_case ?? 0) > 0 ? String(product.cost_price_per_case) : "",
+    );
+    sellFields.reset(
+      product.selling_price > 0 ? String(product.selling_price) : "",
+      (product.case_price ?? 0) > 0 ? String(product.case_price) : "",
+    );
   }
 
   const unitsPerCase = Math.max(1, Math.floor(Number(pack)) || 1);
@@ -555,14 +564,16 @@ function EditProductDialog({
       if (!onHandValid) {
         throw new Error("Stock quantity must be a whole number of 0 or more");
       }
+      const cost = costFields.resolved(pack);
+      const sell = sellFields.resolved(pack);
       const { error } = await supabase
         .from("products")
         .update({
           name: name.trim(),
-          cost_price: Number(cost || 0),
-          cost_price_per_case: Number(costCase || 0),
-          selling_price: Number(sell || 0),
-          case_price: Number(casePrice || 0),
+          cost_price: cost.unit,
+          cost_price_per_case: cost.casePrice,
+          selling_price: sell.unit,
+          case_price: sell.casePrice,
           units_per_case: unitsPerCase,
           quantity_on_hand: unitsOnHand,
         })
@@ -582,7 +593,10 @@ function EditProductDialog({
       <DialogContent className="panel rounded-xl">
         <DialogHeader>
           <DialogTitle className="font-display">Edit product</DialogTitle>
-          <DialogDescription>Update prices, pack size, and stock on hand.</DialogDescription>
+          <DialogDescription>
+            Update prices, pack size, and stock on hand. Leave unit or case blank to auto-fill from
+            the other × units per case.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -616,8 +630,8 @@ function EditProductDialog({
                 type="number"
                 min="0"
                 step="0.01"
-                value={cost}
-                onChange={(e) => setCost(e.target.value)}
+                value={costFields.unit}
+                onChange={(e) => costFields.onUnitChange(e.target.value, pack)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -630,8 +644,8 @@ function EditProductDialog({
                 type="number"
                 min="0"
                 step="0.01"
-                value={costCase}
-                onChange={(e) => setCostCase(e.target.value)}
+                value={costFields.casePrice}
+                onChange={(e) => costFields.onCaseChange(e.target.value, pack)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -644,8 +658,8 @@ function EditProductDialog({
                 type="number"
                 min="0"
                 step="0.01"
-                value={sell}
-                onChange={(e) => setSell(e.target.value)}
+                value={sellFields.unit}
+                onChange={(e) => sellFields.onUnitChange(e.target.value, pack)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -658,8 +672,8 @@ function EditProductDialog({
                 type="number"
                 min="0"
                 step="0.01"
-                value={casePrice}
-                onChange={(e) => setCasePrice(e.target.value)}
+                value={sellFields.casePrice}
+                onChange={(e) => sellFields.onCaseChange(e.target.value, pack)}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
@@ -673,7 +687,12 @@ function EditProductDialog({
                 min="1"
                 step="1"
                 value={pack}
-                onChange={(e) => setPack(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPack(next);
+                  costFields.onPackChange(next);
+                  sellFields.onPackChange(next);
+                }}
                 className={`${fieldClass} tabular font-mono`}
               />
             </div>
