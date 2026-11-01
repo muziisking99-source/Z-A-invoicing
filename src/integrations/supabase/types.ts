@@ -76,6 +76,7 @@ export type Database = {
       }
       invoices: {
         Row: {
+          amount_paid: number
           created_at: string
           customer_name: string
           delivery_cost: number
@@ -84,6 +85,7 @@ export type Database = {
           total: number
         }
         Insert: {
+          amount_paid?: number
           created_at?: string
           customer_name: string
           delivery_cost?: number
@@ -92,6 +94,7 @@ export type Database = {
           total?: number
         }
         Update: {
+          amount_paid?: number
           created_at?: string
           customer_name?: string
           delivery_cost?: number
@@ -100,6 +103,110 @@ export type Database = {
           total?: number
         }
         Relationships: []
+      }
+      order_items: {
+        Row: {
+          case_price: number
+          created_at: string
+          id: string
+          line_total: number
+          order_id: string
+          price_basis: string
+          product_id: string | null
+          product_name: string
+          qty_basis: string
+          quantity: number
+          unit_price: number
+          units_per_case: number
+        }
+        Insert: {
+          case_price?: number
+          created_at?: string
+          id?: string
+          line_total: number
+          order_id: string
+          price_basis?: string
+          product_id?: string | null
+          product_name: string
+          qty_basis?: string
+          quantity: number
+          unit_price: number
+          units_per_case?: number
+        }
+        Update: {
+          case_price?: number
+          created_at?: string
+          id?: string
+          line_total?: number
+          order_id?: string
+          price_basis?: string
+          product_id?: string | null
+          product_name?: string
+          qty_basis?: string
+          quantity?: number
+          unit_price?: number
+          units_per_case?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string
+          customer_name: string
+          delivery_cost: number
+          id: string
+          invoice_id: string | null
+          order_number: string
+          status: string
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_name: string
+          delivery_cost?: number
+          id?: string
+          invoice_id?: string | null
+          order_number: string
+          status?: string
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string
+          delivery_cost?: number
+          id?: string
+          invoice_id?: string | null
+          order_number?: string
+          status?: string
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       products: {
         Row: {
@@ -145,13 +252,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      create_invoice: {
-        Args: {
-          p_customer_name: string
-          p_delivery_cost?: number
-          p_items: Json
-        }
+      cancel_order: {
+        Args: { p_order_id: string }
         Returns: {
+          created_at: string
+          customer_name: string
+          delivery_cost: number
+          id: string
+          invoice_id: string | null
+          order_number: string
+          status: string
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      convert_order_to_invoice: {
+        Args: { p_order_id: string }
+        Returns: {
+          amount_paid: number
           created_at: string
           customer_name: string
           delivery_cost: number
@@ -166,15 +290,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      delete_invoice: { Args: { p_invoice_id: string }; Returns: undefined }
-      update_invoice: {
+      create_invoice: {
         Args: {
           p_customer_name: string
           p_delivery_cost?: number
-          p_invoice_id: string
           p_items: Json
         }
         Returns: {
+          amount_paid: number
           created_at: string
           customer_name: string
           delivery_cost: number
@@ -185,6 +308,100 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "invoices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_order: {
+        Args: {
+          p_customer_name: string
+          p_delivery_cost?: number
+          p_items: Json
+        }
+        Returns: {
+          created_at: string
+          customer_name: string
+          delivery_cost: number
+          id: string
+          invoice_id: string | null
+          order_number: string
+          status: string
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      delete_invoice: { Args: { p_invoice_id: string }; Returns: undefined }
+      record_invoice_payment: {
+        Args: {
+          p_amount_paid: number
+          p_invoice_id: string
+        }
+        Returns: {
+          amount_paid: number
+          created_at: string
+          customer_name: string
+          delivery_cost: number
+          id: string
+          invoice_number: string
+          total: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invoices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_invoice: {
+        Args: {
+          p_customer_name: string
+          p_delivery_cost?: number
+          p_invoice_id: string
+          p_items: Json
+        }
+        Returns: {
+          amount_paid: number
+          created_at: string
+          customer_name: string
+          delivery_cost: number
+          id: string
+          invoice_number: string
+          total: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invoices"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_order: {
+        Args: {
+          p_customer_name: string
+          p_delivery_cost?: number
+          p_items: Json
+          p_order_id: string
+        }
+        Returns: {
+          created_at: string
+          customer_name: string
+          delivery_cost: number
+          id: string
+          invoice_id: string | null
+          order_number: string
+          status: string
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
           isOneToOne: true
           isSetofReturn: false
         }

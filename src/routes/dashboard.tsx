@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { DualMetricBars, HorizontalBarChart, LineAreaChart } from "@/components/charts";
 import { money } from "@/lib/format";
+import { amountOwing } from "@/lib/invoice-payments";
 import {
   buildDashboardStats,
   formatPct,
@@ -49,7 +50,7 @@ function useSalesData() {
       const [invoicesRes, itemsRes] = await Promise.all([
         supabase
           .from("invoices")
-          .select("id, total, created_at")
+          .select("id, total, amount_paid, created_at")
           .order("created_at", { ascending: false }),
         supabase
           .from("invoice_items")
@@ -65,6 +66,10 @@ function useSalesData() {
         total: Number(row.total),
         created_at: row.created_at,
       }));
+      const outstandingOwing = (invoicesRes.data ?? []).reduce(
+        (sum, row) => sum + amountOwing(Number(row.total), Number(row.amount_paid ?? 0)),
+        0,
+      );
       const items: InvoiceItemRow[] = (itemsRes.data ?? []).map((row) => ({
         id: row.id,
         invoice_id: row.invoice_id,
@@ -77,7 +82,7 @@ function useSalesData() {
         qty_basis: row.qty_basis === "case" ? "case" : "unit",
         units_per_case: Math.max(1, Number(row.units_per_case ?? 1) || 1),
       }));
-      return { invoices, items };
+      return { invoices, items, outstandingOwing };
     },
   });
 }
@@ -140,7 +145,7 @@ function DashboardPage() {
         </section>
       ) : (
         <>
-          <section className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+          <section className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-5">
             <Kpi
               label="Revenue"
               value={money(stats.revenue)}
@@ -155,6 +160,12 @@ function DashboardPage() {
                   : `${formatPct(stats.marginPct)} margin`
               }
               tone={stats.profit >= 0 ? "good" : "bad"}
+            />
+            <Kpi
+              label="Outstanding"
+              value={money(sales?.outstandingOwing ?? 0)}
+              hint="Still owing across all invoices"
+              tone={(sales?.outstandingOwing ?? 0) > 0 ? "bad" : "good"}
             />
             <Kpi
               label="Cost of goods"

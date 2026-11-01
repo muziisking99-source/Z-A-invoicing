@@ -7,6 +7,7 @@ const NAV = [
   { to: "/dashboard", label: "Dashboard", short: "Dash" },
   { to: "/", label: "Stock", short: "Stock" },
   { to: "/new-invoice", label: "New Invoice", short: "Invoice" },
+  { to: "/orders", label: "Orders", short: "Orders" },
   { to: "/history", label: "History", short: "History" },
 ] as const;
 
@@ -74,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </button>
               </div>
             </div>
-            <nav className="mt-3 grid grid-cols-4 gap-1.5 lg:mt-4 lg:flex lg:flex-col lg:gap-1.5">
+            <nav className="mt-3 grid grid-cols-5 gap-1 lg:mt-4 lg:flex lg:flex-col lg:gap-1.5">
               {NAV.map((item) => (
                 <Link
                   key={item.to}

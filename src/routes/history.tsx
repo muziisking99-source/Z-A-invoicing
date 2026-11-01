@@ -7,10 +7,17 @@ import { AppShell, PageHeader } from "@/components/AppShell";
 import { money, shortDate } from "@/lib/format";
 import { downloadDeliveryNotePdf, downloadInvoicePdf } from "@/lib/invoice-pdf";
 import {
+  amountOwing,
+  paymentStatus,
+  paymentStatusLabel,
+  type PaymentStatus,
+} from "@/lib/invoice-payments";
+import {
   chargedLinePrice,
   type PriceBasis,
   type QtyBasis,
 } from "@/lib/products";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -26,12 +33,12 @@ export const Route = createFileRoute("/history")({
       { title: "Invoice History · Sweet for You Salvage" },
       {
         name: "description",
-        content: "Browse past invoices, open line-item detail, and download PDFs.",
+        content: "Browse past invoices, record payments, and download PDFs.",
       },
       { property: "og:title", content: "Invoice History · Sweet for You Salvage" },
       {
         property: "og:description",
-        content: "Past invoices with totals and PDF download.",
+        content: "Past invoices with outstanding balances and PDF download.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -46,6 +53,7 @@ type Invoice = {
   customer_name: string;
   total: number;
   delivery_cost: number;
+  amount_paid: number;
   created_at: string;
 };
 
@@ -61,12 +69,17 @@ type InvoiceItem = {
   line_total: number;
 };
 
+type PaymentFilter = "all" | "outstanding" | "paid";
+
 const primaryBtn =
   "btn-press w-full rounded-lg bg-primary px-5 py-3 text-base font-semibold text-primary-foreground disabled:opacity-60 sm:w-auto";
 const ghostBtn =
   "btn-press w-full rounded-lg border border-line bg-paper px-5 py-3 text-base font-medium text-ink hover:bg-secondary sm:w-auto";
 const dangerBtn =
   "btn-press w-full rounded-lg border border-destructive/30 bg-paper px-5 py-3 text-base font-semibold text-destructive hover:bg-destructive/5 disabled:opacity-60 sm:w-auto";
+const fieldClass =
+  "mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-base text-ink outline-none focus:border-primary";
+const labelClass = "text-sm font-medium text-soft";
 
 function useInvoices() {
   return useQuery({
@@ -75,13 +88,16 @@ function useInvoices() {
     queryFn: async (): Promise<Invoice[]> => {
       const { data, error } = await supabase
         .from("invoices")
-        .select("id, invoice_number, customer_name, total, delivery_cost, created_at")
+        .select(
+          "id, invoice_number, customer_name, total, delivery_cost, amount_paid, created_at",
+        )
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []).map((row) => ({
         ...row,
         total: Number(row.total),
         delivery_cost: Number(row.delivery_cost ?? 0),
+        amount_paid: Number(row.amount_paid ?? 0),
       })) as Invoice[];
     },
   });
@@ -135,15 +151,50 @@ function useInvoiceItems(invoiceId: string | null) {
   });
 }
 
+function statusTone(status: PaymentStatus) {
+  if (status === "paid") return "bg-emerald-500/10 text-emerald-800";
+  if (status === "partial") return "bg-amber-500/10 text-amber-900";
+  return "bg-rose-500/10 text-rose-800";
+}
+
+function PaymentBadge({ invoice }: { invoice: Invoice }) {
+  const status = paymentStatus(invoice.total, invoice.amount_paid);
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wide",
+        statusTone(status),
+      )}
+    >
+      {paymentStatusLabel(status)}
+    </span>
+  );
+}
+
 function HistoryPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: invoices = [], isLoading } = useInvoices();
+  const [filter, setFilter] = useState<PaymentFilter>("all");
   const [selected, setSelected] = useState<Invoice | null>(null);
   const [deleting, setDeleting] = useState<Invoice | null>(null);
+  const [paying, setPaying] = useState<Invoice | null>(null);
+  const [paidInput, setPaidInput] = useState("");
   const { data: items = [], isLoading: itemsLoading } = useInvoiceItems(selected?.id ?? null);
 
-  const openCount = useMemo(() => invoices.length, [invoices]);
+  const filtered = useMemo(() => {
+    return invoices.filter((invoice) => {
+      const status = paymentStatus(invoice.total, invoice.amount_paid);
+      if (filter === "outstanding") return status !== "paid";
+      if (filter === "paid") return status === "paid";
+      return true;
+    });
+  }, [invoices, filter]);
+
+  const outstandingTotal = useMemo(
+    () => invoices.reduce((sum, inv) => sum + amountOwing(inv.total, inv.amount_paid), 0),
+    [invoices],
+  );
 
   const removeInvoice = useMutation({
     mutationFn: async (id: string) => {
@@ -154,9 +205,38 @@ function HistoryPage() {
       toast.success("Invoice deleted — stock restored");
       setDeleting(null);
       if (selected?.id === id) setSelected(null);
+      if (paying?.id === id) setPaying(null);
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["invoice-items"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-sales"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const savePayment = useMutation({
+    mutationFn: async ({ id, amount }: { id: string; amount: number }) => {
+      const { data, error } = await supabase.rpc("record_invoice_payment", {
+        p_invoice_id: id,
+        p_amount_paid: amount,
+      });
+      if (error) throw error;
+      return data as Invoice;
+    },
+    onSuccess: (data) => {
+      toast.success("Payment updated");
+      setPaying(null);
+      setSelected((prev) =>
+        prev && prev.id === data.id
+          ? {
+              ...prev,
+              amount_paid: Number(data.amount_paid ?? 0),
+              total: Number(data.total),
+            }
+          : prev,
+      );
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-sales"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -164,6 +244,11 @@ function HistoryPage() {
   const openEdit = (invoice: Invoice) => {
     setSelected(null);
     navigate({ to: "/new-invoice", search: { edit: invoice.id } });
+  };
+
+  const openPayment = (invoice: Invoice) => {
+    setPaying(invoice);
+    setPaidInput(String(invoice.amount_paid));
   };
 
   const pdfData = (invoice: Invoice, lineItems: InvoiceItem[]) => ({
@@ -205,13 +290,56 @@ function HistoryPage() {
     }
   };
 
+  const submitPayment = () => {
+    if (!paying) return;
+    const amount = Number(paidInput);
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error("Enter a valid amount paid");
+      return;
+    }
+    if (amount > paying.total) {
+      toast.error("Amount paid cannot exceed the invoice total");
+      return;
+    }
+    savePayment.mutate({ id: paying.id, amount });
+  };
+
   return (
     <AppShell>
       <PageHeader eyebrow="Invoicing" title="Invoice history">
-        <span className="text-sm font-medium text-soft">
-          {openCount} invoice{openCount === 1 ? "" : "s"}
-        </span>
+        <div className="text-right">
+          <p className="text-sm font-medium text-soft">
+            {filtered.length} invoice{filtered.length === 1 ? "" : "s"}
+          </p>
+          <p className="mt-0.5 font-mono text-sm font-semibold tabular-nums text-accent-ink">
+            Owing {money(outstandingTotal)}
+          </p>
+        </div>
       </PageHeader>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {(
+          [
+            { key: "all", label: "All" },
+            { key: "outstanding", label: "Outstanding" },
+            { key: "paid", label: "Paid" },
+          ] as const
+        ).map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => setFilter(option.key)}
+            className={cn(
+              "btn-press rounded-lg px-3 py-2 text-sm font-medium",
+              filter === option.key
+                ? "bg-primary text-primary-foreground"
+                : "border border-line bg-paper text-ink hover:bg-secondary",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
 
       {/* Mobile cards */}
       <section className="mt-3 space-y-2.5 md:hidden">
@@ -222,78 +350,100 @@ function HistoryPage() {
               <div className="skeleton-bar mt-3 h-4 w-full" />
             </div>
           ))
-        ) : invoices.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="panel rounded-xl px-4 py-10 text-center text-soft">
-            No invoices yet. Create one from New Invoice.
+            {invoices.length === 0
+              ? "No invoices yet. Create one from New Invoice."
+              : "No invoices match this filter."}
           </div>
         ) : (
-          invoices.map((invoice) => (
-            <div key={invoice.id} className="panel rounded-xl p-4">
-              <button
-                type="button"
-                onClick={() => setSelected(invoice)}
-                className="btn-press w-full text-left"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-mono text-sm font-semibold text-accent-ink">
-                      {invoice.invoice_number}
-                    </p>
-                    <p className="mt-1 truncate text-lg font-medium text-ink">
-                      {invoice.customer_name}
-                    </p>
-                    <p className="mt-1 text-sm text-soft">{shortDate(invoice.created_at)}</p>
-                  </div>
-                  <p className="shrink-0 font-mono text-base font-semibold tabular-nums">
-                    {money(invoice.total)}
-                  </p>
-                </div>
-              </button>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+          filtered.map((invoice) => {
+            const owing = amountOwing(invoice.total, invoice.amount_paid);
+            return (
+              <div key={invoice.id} className="panel rounded-xl p-4">
                 <button
                   type="button"
                   onClick={() => setSelected(invoice)}
-                  className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
+                  className="btn-press w-full text-left"
                 >
-                  View
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-mono text-sm font-semibold text-accent-ink">
+                          {invoice.invoice_number}
+                        </p>
+                        <PaymentBadge invoice={invoice} />
+                      </div>
+                      <p className="mt-1 truncate text-lg font-medium text-ink">
+                        {invoice.customer_name}
+                      </p>
+                      <p className="mt-1 text-sm text-soft">{shortDate(invoice.created_at)}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-mono text-base font-semibold tabular-nums">
+                        {money(invoice.total)}
+                      </p>
+                      <p className="mt-1 text-xs text-soft">
+                        Owing {money(owing)}
+                      </p>
+                    </div>
+                  </div>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => openEdit(invoice)}
-                  className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeliveryNote(invoice)}
-                  className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
-                >
-                  Delivery note
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleting(invoice)}
-                  className="btn-press rounded-lg border border-destructive/30 px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/5"
-                >
-                  Delete
-                </button>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelected(invoice)}
+                    className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
+                  >
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(invoice)}
+                    className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openPayment(invoice)}
+                    className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
+                  >
+                    Record payment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeliveryNote(invoice)}
+                    className="btn-press rounded-lg border border-line px-3 py-2.5 text-sm font-medium text-ink hover:bg-secondary"
+                  >
+                    Delivery note
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(invoice)}
+                    className="btn-press col-span-2 rounded-lg border border-destructive/30 px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/5"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </section>
 
       {/* Desktop table */}
       <section className="panel mt-3 hidden overflow-hidden rounded-xl md:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-left text-base">
+          <table className="w-full min-w-[48rem] text-left text-base">
             <thead>
               <tr className="sticky top-0 z-[1] border-b border-line bg-secondary text-xs font-semibold uppercase tracking-wide text-soft sm:text-sm">
                 <th className="px-4 py-2.5 sm:px-5">Invoice #</th>
                 <th className="px-4 py-2.5 sm:px-5">Customer</th>
                 <th className="px-4 py-2.5 sm:px-5">Date</th>
                 <th className="px-4 py-2.5 text-right sm:px-5">Total</th>
+                <th className="px-4 py-2.5 text-right sm:px-5">Owing</th>
+                <th className="px-4 py-2.5 sm:px-5">Status</th>
                 <th className="px-4 py-2.5 sm:px-5" />
               </tr>
             </thead>
@@ -301,19 +451,21 @@ function HistoryPage() {
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b border-line/80 last:border-0">
-                    <td className="px-4 py-3 sm:px-5" colSpan={5}>
+                    <td className="px-4 py-3 sm:px-5" colSpan={7}>
                       <div className="skeleton-bar h-5 w-full max-w-lg" />
                     </td>
                   </tr>
                 ))
-              ) : invoices.length === 0 ? (
+              ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-soft sm:px-5">
-                    No invoices yet. Create one from New Invoice.
+                  <td colSpan={7} className="px-4 py-10 text-center text-soft sm:px-5">
+                    {invoices.length === 0
+                      ? "No invoices yet. Create one from New Invoice."
+                      : "No invoices match this filter."}
                   </td>
                 </tr>
               ) : (
-                invoices.map((invoice, index) => (
+                filtered.map((invoice, index) => (
                   <tr
                     key={invoice.id}
                     className="row-enter border-b border-line/80 transition-colors duration-150 last:border-0 hover:bg-secondary/80"
@@ -328,13 +480,23 @@ function HistoryPage() {
                         {invoice.invoice_number}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-base sm:px-5 sm:text-lg">{invoice.customer_name}</td>
-                    <td className="px-4 py-3 text-soft sm:px-5">{shortDate(invoice.created_at)}</td>
+                    <td className="px-4 py-3 text-base sm:px-5 sm:text-lg">
+                      {invoice.customer_name}
+                    </td>
+                    <td className="px-4 py-3 text-soft sm:px-5">
+                      {shortDate(invoice.created_at)}
+                    </td>
                     <td className="tabular px-4 py-3 text-right font-mono text-[15px] font-semibold sm:px-5">
                       {money(invoice.total)}
                     </td>
+                    <td className="tabular px-4 py-3 text-right font-mono text-[15px] font-semibold sm:px-5">
+                      {money(amountOwing(invoice.total, invoice.amount_paid))}
+                    </td>
+                    <td className="px-4 py-3 sm:px-5">
+                      <PaymentBadge invoice={invoice} />
+                    </td>
                     <td className="px-4 py-3 text-right sm:px-5">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => setSelected(invoice)}
@@ -348,6 +510,13 @@ function HistoryPage() {
                           className="btn-press rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-secondary"
                         >
                           Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openPayment(invoice)}
+                          className="btn-press rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-secondary"
+                        >
+                          Record payment
                         </button>
                         <button
                           type="button"
@@ -385,6 +554,10 @@ function HistoryPage() {
                   {selected.customer_name} · {shortDate(selected.created_at)}
                 </DialogDescription>
               </DialogHeader>
+
+              <div className="mt-1">
+                <PaymentBadge invoice={selected} />
+              </div>
 
               <div className="mt-2 overflow-x-auto rounded-lg border border-line">
                 <table className="w-full min-w-[24rem] text-left text-sm sm:text-base">
@@ -449,6 +622,20 @@ function HistoryPage() {
                       </div>
                     </dl>
                   ) : null}
+                  <dl className="mb-2 space-y-1 text-sm text-soft">
+                    <div className="flex gap-3">
+                      <dt>Paid</dt>
+                      <dd className="font-mono tabular-nums text-ink">
+                        {money(selected.amount_paid)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-3">
+                      <dt>Owing</dt>
+                      <dd className="font-mono tabular-nums text-accent-ink">
+                        {money(amountOwing(selected.total, selected.amount_paid))}
+                      </dd>
+                    </div>
+                  </dl>
                   <p className="text-sm font-medium uppercase tracking-[0.12em] text-soft">
                     Total
                   </p>
@@ -456,13 +643,20 @@ function HistoryPage() {
                     {money(selected.total)}
                   </p>
                 </div>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
                   <button
                     type="button"
                     onClick={() => openEdit(selected)}
                     className={ghostBtn}
                   >
                     Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openPayment(selected)}
+                    className={ghostBtn}
+                  >
+                    Record payment
                   </button>
                   <button
                     type="button"
@@ -489,6 +683,84 @@ function HistoryPage() {
                   </button>
                 </div>
               </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!paying}
+        onOpenChange={(open) => {
+          if (!open) setPaying(null);
+        }}
+      >
+        <DialogContent className="panel max-w-md rounded-xl border-line sm:rounded-xl">
+          {paying ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-display text-xl sm:text-2xl">
+                  Record payment
+                </DialogTitle>
+                <DialogDescription className="text-sm text-soft sm:text-base">
+                  {paying.invoice_number} · {paying.customer_name}
+                </DialogDescription>
+              </DialogHeader>
+
+              <dl className="mt-2 space-y-1 text-sm text-soft">
+                <div className="flex justify-between gap-3">
+                  <dt>Invoice total</dt>
+                  <dd className="font-mono tabular-nums text-ink">{money(paying.total)}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt>Currently paid</dt>
+                  <dd className="font-mono tabular-nums text-ink">
+                    {money(paying.amount_paid)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt>Still owing</dt>
+                  <dd className="font-mono tabular-nums text-accent-ink">
+                    {money(amountOwing(paying.total, paying.amount_paid))}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-4">
+                <label className={labelClass} htmlFor="amount-paid">
+                  Amount paid (total so far)
+                </label>
+                <input
+                  id="amount-paid"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={paidInput}
+                  onChange={(e) => setPaidInput(e.target.value)}
+                  className={`${fieldClass} tabular font-mono`}
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-2">
+                <button
+                  type="button"
+                  className={ghostBtn}
+                  onClick={() => setPaidInput(String(paying.total))}
+                >
+                  Mark paid in full
+                </button>
+                <button type="button" className={ghostBtn} onClick={() => setPaying(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={primaryBtn}
+                  disabled={savePayment.isPending}
+                  onClick={submitPayment}
+                >
+                  {savePayment.isPending ? "Saving…" : "Save payment"}
+                </button>
+              </DialogFooter>
             </>
           ) : null}
         </DialogContent>
